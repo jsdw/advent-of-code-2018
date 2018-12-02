@@ -1,10 +1,8 @@
-use std::env;
-use std::fs;
 use std::collections::HashSet;
 
 fn main() {
 
-    let filename = env::args().nth(1).expect("need puzzle input");
+    let filename = std::env::args().nth(1).expect("need puzzle input");
 
     let numbers = std::fs::read_to_string(filename)
         .expect("can't open file")

@@ -1,0 +1,10 @@
+[package]
+name = "day02"
+version = "0.1.0"
+authors = ["James Wilson"]
+
+[[bin]]
+name = "day02"
+path = "solution/day02.rs"
+
+[dependencies]
