@@ -10,9 +10,9 @@ fn main() {
         .map(|b| b.parse().expect("valid number"))
         .collect::<Vec<i64>>();
 
-
     // star 1:
-    println!("Star 1: {}", numbers.iter().fold(0, |sum, &n| sum + n));
+    let offset: i64 = numbers.iter().sum();
+    println!("Star 1: {}", offset);
 
     // star 2:
     let mut freq = 0;
