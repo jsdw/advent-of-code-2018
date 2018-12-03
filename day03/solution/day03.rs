@@ -105,8 +105,8 @@ mod canvas {
         }
         pub fn draw<F>(&mut self, square: &square::Square, mut merge: F)
         where F: FnMut(Option<T>) -> Option<T> {
-            let right = self.width.min(square.left+square.width);
-            let bottom = self.height.min(square.top+square.height);
+            let right = usize::min(self.width, square.left+square.width);
+            let bottom = usize::min(self.height, square.top+square.height);
             for x in square.left .. right {
                 for y in square.top .. bottom {
                     let idx = y * self.width + x;
