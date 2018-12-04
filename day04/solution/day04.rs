@@ -1,8 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::cmp::{Ordering};
-use std::collections::HashMap;
 use self::EventType::*;
+use std::collections::HashMap;
 
 fn main() {
 
@@ -14,40 +13,57 @@ fn main() {
         .collect();
 
     // Sort events chronologically:
-    events.sort_by_key(|ev| ev.date);
+    events.sort_by_key(|ev| (ev.date, ev.time));
 
-    let best_guard_id = 0;
-    let best_time_asleep = 0;
-    let current_guard_id = 0;
-    let current_time_asleep = 0;
-    let current_hour = 0;
-    let current_minute = 0;
-
+    // Tally up how long each guard spent each minute asleep:
+    let mut sleep_times = HashMap::new();
+    let mut current_guard_id = 0;
+    let mut started_sleeping_min = 0;
     for e in &events {
         match e.ty {
             GuardBegins(id) => {
-                if current_time_asleep > best_time_asleep {
-                    best_guard_id = current_guard_id;
-                    best_time_asleep = current_time_asleep;
-                }
                 current_guard_id = id;
-                current_hour = e.date.hour;
-                current_minute = e.date.minute;
-                current_time_asleep = 0;
             },
             FallsAsleep => {
-
+                started_sleeping_min = e.time.minute;
             },
             WakesUp => {
-
+                let awake_min = e.time.minute;
+                let mins_slept = sleep_times.entry(current_guard_id).or_insert([0u32; 60]);
+                for v in &mut mins_slept[started_sleeping_min as usize .. awake_min as usize] {
+                    *v += 1;
+                }
             }
         }
     }
-    println!("Star 1: {}", best_guard_id as u32 * best_time_asleep);
 
-    for e in events {
-        println!("{:?}", e);
-    }
+    // Which guard slept the most in total and which minutes?
+    let (&sleepiest_guard_id, &sleepiest_guard_minutes) = sleep_times
+        .iter()
+        .max_by_key(|&(_,times)| times.iter().sum::<u32>())
+        .unwrap();
+
+    // Look to see which minute this guard was asleep the most:
+    let sleepiest_minute = sleepiest_guard_minutes
+        .into_iter()
+        .enumerate()
+        .max_by_key(|&(_,m)| m)
+        .unwrap().0;
+
+    // ... annnd, that gives us star 1:
+    println!("Star 1: {}", sleepiest_minute * sleepiest_guard_id as usize);
+
+    // Now, find out which guard spent a single minute asleep the most:
+    let (sleepiest_guard_id2, sleepiest_guard_minute2, _) = sleep_times
+        .into_iter()
+        .map(|(id,times)| {
+            let (min,&time) = times.into_iter().enumerate().max_by_key(|&(_,v)| v).unwrap();
+            (id, min, time)
+        })
+        .max_by_key(|&(_,_,time)| time)
+        .unwrap();
+
+    println!("Star 2: {}", sleepiest_guard_minute2 * sleepiest_guard_id2 as usize);
 
 }
 
@@ -78,14 +94,16 @@ fn parse_event(s: &str) -> Event {
     };
 
     Event {
-        date: DateTime { month, day, hour, minute },
+        date: Date { month, day },
+        time: Time { hour, minute },
         ty
     }
 }
 
 #[derive(Eq,PartialEq,Debug,Clone,Copy)]
 struct Event {
-    date: DateTime,
+    date: Date,
+    time: Time,
     ty: EventType
 }
 
@@ -97,30 +115,13 @@ enum EventType {
 }
 
 #[derive(Eq,PartialEq,Debug,Clone,Copy,PartialOrd,Ord)]
-struct DateTime {
+struct Date {
     month: u8,
-    day: u8,
-    hour: u8,
-    minute: u8
+    day: u8
 }
 
-impl DateTime {
-    /// Distance between the hour and minute of two datetimes, always positive.
-    fn time_distance(&self, other: &DateTime) -> u32 {
-        let (small,big) = if (self.hour,self.minute) < (other.hour,other.minute) {
-            (self,other)
-        } else {
-            (other,self)
-        };
-
-        let mut diff = (other.hour - self.hour) as u32 * 60;
-
-        if small.minute < big.minute {
-            diff += (big.minute - small.minute) as u32;
-        } else {
-            diff -= (small.minute - big.minute) as u32;
-        }
-
-        diff
-    }
+#[derive(Eq,PartialEq,Debug,Clone,Copy,PartialOrd,Ord)]
+struct Time {
+    hour: u8,
+    minute: u8
 }
