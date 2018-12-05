@@ -16,10 +16,51 @@ fn main() {
     events.sort_by_key(|ev| (ev.date, ev.time));
 
     // Tally up how long each guard spent each minute asleep:
+    let sleep_times = tally_slept_minutes(&events);
+
+    // Get our answers from this data:
+    println!("Star 1: {}", day1(&sleep_times));
+    println!("Star 2: {}", day2(&sleep_times));
+
+}
+
+fn day1(sleep_times: &HashMap<u16, [u32;60]>) -> usize {
+    // Which guard slept the most in total and which minutes?
+    let (&sleepiest_guard_id, &sleepiest_guard_minutes) = sleep_times
+        .iter()
+        .max_by_key(|&(_,times)| times.iter().sum::<u32>())
+        .unwrap();
+
+    // Look to see which minute this guard was asleep the most:
+    let sleepiest_minute = sleepiest_guard_minutes
+        .iter()
+        .enumerate()
+        .max_by_key(|&(_,m)| m)
+        .unwrap().0;
+
+    sleepiest_minute * sleepiest_guard_id as usize
+}
+
+fn day2(sleep_times: &HashMap<u16, [u32;60]>) -> usize {
+    // Find out which guard spent a single minute asleep the most:
+    let (sleepiest_guard_id, sleepiest_guard_minute, _) = sleep_times
+        .iter()
+        .map(|(&id,times)| {
+            let (min,&time) = times.into_iter().enumerate().max_by_key(|&(_,v)| v).unwrap();
+            (id, min, time)
+        })
+        .max_by_key(|&(_,_,time)| time)
+        .unwrap();
+
+    sleepiest_guard_minute * sleepiest_guard_id as usize
+}
+
+fn tally_slept_minutes(events: &Vec<Event>) -> HashMap<u16, [u32;60]> {
+    // Tally up how long each guard spent each minute asleep:
     let mut sleep_times = HashMap::new();
     let mut current_guard_id = 0;
     let mut started_sleeping_min = 0;
-    for e in &events {
+    for e in events {
         match e.ty {
             GuardBegins(id) => {
                 current_guard_id = id;
@@ -36,35 +77,7 @@ fn main() {
             }
         }
     }
-
-    // Which guard slept the most in total and which minutes?
-    let (&sleepiest_guard_id, &sleepiest_guard_minutes) = sleep_times
-        .iter()
-        .max_by_key(|&(_,times)| times.iter().sum::<u32>())
-        .unwrap();
-
-    // Look to see which minute this guard was asleep the most:
-    let sleepiest_minute = sleepiest_guard_minutes
-        .into_iter()
-        .enumerate()
-        .max_by_key(|&(_,m)| m)
-        .unwrap().0;
-
-    // ... annnd, that gives us star 1:
-    println!("Star 1: {}", sleepiest_minute * sleepiest_guard_id as usize);
-
-    // Now, find out which guard spent a single minute asleep the most:
-    let (sleepiest_guard_id2, sleepiest_guard_minute2, _) = sleep_times
-        .into_iter()
-        .map(|(id,times)| {
-            let (min,&time) = times.into_iter().enumerate().max_by_key(|&(_,v)| v).unwrap();
-            (id, min, time)
-        })
-        .max_by_key(|&(_,_,time)| time)
-        .unwrap();
-
-    println!("Star 2: {}", sleepiest_guard_minute2 * sleepiest_guard_id2 as usize);
-
+    sleep_times
 }
 
 fn parse_event(s: &str) -> Event {
