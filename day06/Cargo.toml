@@ -1,0 +1,11 @@
+[package]
+name = "day06"
+version = "0.1.0"
+edition = "2018"
+authors = ["James Wilson"]
+
+[[bin]]
+name = "day06"
+path = "solution/day06.rs"
+
+[dependencies]
