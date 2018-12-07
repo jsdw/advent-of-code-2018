@@ -20,63 +20,69 @@ fn main() {
     });
 
     // For star 1, we can do one step at a time. Each time we do it,
-    // we find the next lowest alpha step to do. What order?
+    // we find the next lowest alpha step to do.
     let mut order = String::new();
     let mut dependencies = deps.clone();
-    while let Some(next_step) = find_next_step(&dependencies) {
+    while dependencies.len() > 0 {
+        let next_step = *find_next_steps(&dependencies).get(0).unwrap();
         remove_step(next_step, &mut dependencies);
         order.push(next_step);
     }
     println!("Star 1: {}", order);
 
-    // For star 2, we have 4 workers completing steps, each
-    // which takes a certain time to do. Count up a timer,
-    // plucking a task off the dependency list each time a
-    // worker becomes free.
-    let mut workers: Vec<(char,u32)> = vec![(' ', 0); 5];
+    // For star 2, we have 5 workers completing steps, as fast as
+    // possible (in parallel), each which takes a certain time to do.
+    let mut workers = vec![(None, 0); 5];
+    let mut pending_steps: Vec<char> = vec![];
     let mut time_spent = 0;
     let mut dependencies = deps;
     while dependencies.len() > 0 {
-
-        // Step forwards as many seconds as we need to do something.
-        // Initially, we won't have to wait at all since all workers
-        // have 0 seconds left of tasks to do.
-        let maybe_wait = workers
+        // How far do we need to step forwards in
+        // time until we can potentially act?
+        let wait = workers
             .iter()
-            .filter(|(_,t) t != 0)
-            .min_by_key(|(_,t)| t)
-            .unwrap().1;
+            .map(|(_,t)| *t)
+            .filter(|t| *t != 0)
+            .min()
+            .unwrap_or(0);
 
-        if let Some(wait) = maybe_wait {
-            time_spent += wait;
-            for w in &mut workers {
-                w.1 -= wait;
+        // Step forward, "finishing" the step for
+        // the worker that hits 0.
+        time_spent += wait;
+        for w in &mut workers {
+            if w.1 != 0 { w.1 -= wait }
+            if w.1 == 0 && w.0.is_some() {
+                remove_step(w.0.unwrap(), &mut dependencies);
+                w.0 = None;
             }
         }
 
-        // Pluck a task from the dependencies and see how long it
-        // will take:
-        // * might be step we are working on already! need list of possible steps
-        // * so that we can find, at this time step, a step that isn't in progress
-        // * to work on if one is available. else we need to hop the next worker to
-        // * 0 and try again....
-        let next_step = find_next_step(&dependencies).unwrap();
-        let next_step_time = next_step as u32 - 4; // A == 61, B == 62..
+        // Get any steps that are currently available and
+        // merge them with any existing pending steps, ignoring
+        // any that are already in progress:
+        let mut next_steps = find_next_steps(&dependencies)
+            .into_iter()
+            .filter(|&c| workers.iter().filter_map(|(s,_)| *s).all(|s| c != s))
+            .collect();
 
-        // Find a worker ready to do the step:
-        let worker = workers.iter_mut().find(|(_,t)| *t == 0).unwrap();
+        pending_steps.append(&mut next_steps);
+        pending_steps.sort();
+        pending_steps.dedup();
 
-        // remove the step the worker has now finished from our
-        // dependencies, and tell the worker to do this new step:
-        remove_step(worker.0, &mut dependencies);
-        *worker = (next_step,next_step_time);
-
+        // Assign as many pending steps to workers as possible
+        // at this time step, for maximum efficiency:
+        for w in workers.iter_mut().filter(|(_,t)| *t == 0) {
+            if pending_steps.len() == 0 { break };
+            let next_step = pending_steps.remove(0);
+            let next_step_time = next_step as u32 - 4; // A == 61, B == 62..
+            *w = (Some(next_step),next_step_time);
+        }
     }
     println!("Star 2: {}", time_spent);
 
 }
 
-fn find_next_step(dependencies: &HashMap<char,Vec<char>>) -> Option<char> {
+fn find_next_steps(dependencies: &HashMap<char,Vec<char>>) -> Vec<char> {
     let mut next_steps: Vec<char> = dependencies
         .iter()
         .filter(|(_,v)| v.len() == 0)
@@ -84,7 +90,7 @@ fn find_next_step(dependencies: &HashMap<char,Vec<char>>) -> Option<char> {
         .collect();
 
     next_steps.sort();
-    next_steps.get(0).map(|&c| c)
+    next_steps
 }
 
 fn remove_step(step: char, dependencies: &mut HashMap<char,Vec<char>>) {
