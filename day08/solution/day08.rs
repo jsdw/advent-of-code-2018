@@ -1,7 +1,8 @@
-macro_rules! err {
-    ($($tt:tt)*) => { Box::<std::error::Error>::from(format!($($tt)*)) }
-}
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + 'static>>;
+use std::error::Error;
+use std::result;
+
+macro_rules! err { ($($tt:tt)*) => { Box::<Error>::from(format!($($tt)*)) } }
+type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
 
 fn main() -> Result<()> {
 
@@ -22,9 +23,8 @@ fn main() -> Result<()> {
 }
 
 fn sum_metadata(tree: &Tree) -> u32 {
-    let mut sum = tree.metadata.iter().fold(0, |acc,&n| acc + n as u32);
-    sum += tree.children.iter().fold(0, |acc,c| acc + sum_metadata(c));
-    sum
+    let sum = tree.metadata.iter().fold(0, |acc,&n| acc + n as u32);
+    sum + tree.children.iter().fold(0, |acc,c| acc + sum_metadata(c))
 }
 
 fn root_node_value(tree: &Tree) -> u32 {
