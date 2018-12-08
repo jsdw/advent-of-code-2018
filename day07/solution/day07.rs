@@ -33,7 +33,6 @@ fn main() {
     // For star 2, we have 5 workers completing steps, as fast as
     // possible (in parallel), each which takes a certain time to do.
     let mut workers = vec![(None, 0); 5];
-    let mut pending_steps: Vec<char> = vec![];
     let mut time_spent = 0;
     let mut dependencies = deps;
     while dependencies.len() > 0 {
@@ -58,16 +57,12 @@ fn main() {
         }
 
         // Get any steps that are currently available and
-        // merge them with any existing pending steps, ignoring
-        // any that are already in progress:
-        let mut next_steps = find_next_steps(&dependencies)
+        // sort them into the order they need doing:
+        let mut pending_steps = find_next_steps(&dependencies)
             .into_iter()
             .filter(|&c| workers.iter().filter_map(|(s,_)| *s).all(|s| c != s))
-            .collect();
-
-        pending_steps.append(&mut next_steps);
+            .collect::<Vec<char>>();
         pending_steps.sort();
-        pending_steps.dedup();
 
         // Assign as many pending steps to workers as possible
         // at this time step, for maximum efficiency:
