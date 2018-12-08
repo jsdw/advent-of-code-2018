@@ -23,9 +23,7 @@ fn main() -> Result<()> {
 
 fn sum_metadata(tree: &Tree) -> u32 {
     let mut sum = tree.metadata.iter().fold(0, |acc,&n| acc + n as u32);
-    for c in &tree.children {
-        sum += sum_metadata(c);
-    }
+    sum += tree.children.iter().fold(0, |acc,c| acc + sum_metadata(c));
     sum
 }
 
@@ -35,10 +33,8 @@ fn root_node_value(tree: &Tree) -> u32 {
     }
     tree.metadata
         .iter()
-        .filter_map(|&idx| {
-            if idx == 0 { return None };
-            tree.children.get(idx as usize - 1)
-        })
+        .filter(|&&idx| idx != 0)
+        .filter_map(|&idx| tree.children.get(idx as usize - 1))
         .fold(0, |acc,c| acc + root_node_value(c))
 }
 
