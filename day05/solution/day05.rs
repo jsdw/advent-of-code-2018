@@ -4,19 +4,13 @@ fn main() {
     let input: Vec<u8> = std::fs::read(filename).expect("can't open file");
 
     // Star 1: do a reaction and see what the length is:
-    println!("Star 1: {}", reaction_length(input.clone()));
+    println!("Star 1: {}", reaction_length(&input));
 
     // Star 2: try removing each letter and then react. What's
     // the shortest length that we can achieve:
     let shortest = (b'a' ..= b'z')
         .map(|c| {
-            let new_input = input
-                .iter()
-                .cloned()
-                .filter(|&b| b != c && b != c - 32)
-                .collect();
-
-            reaction_length(new_input)
+            reaction_length(input.iter().filter(|&&b| b != c && b != c - 32))
         })
         .min()
         .unwrap();
@@ -25,21 +19,15 @@ fn main() {
 
 }
 
-// just remove elements who are different case but same letter
-// until there's nothing left to remove. Treat as ascii and this is easy,
-// tho Vec not the best structure to use:
-fn reaction_length(mut input: Vec<u8>) -> usize {
-    let mut i = 0;
-    while i < input.len() - 1 {
-        let a = input[i];
-        let b = input[i+1];
-
-        if (a as i16 - b as i16).abs() == 32 {
-            input.drain(i..=i+1).for_each(|_| ());
-            if i > 0 { i -= 1 }
-        } else {
-            i += 1;
-        }
+// Iterate through the chars, reacting any that would react with the current
+// last char. Return the final length.
+fn reaction_length<'a>(input: impl IntoIterator<Item=&'a u8>) -> usize {
+    let mut cs = vec![];
+    for &c in input.into_iter() {
+        match cs.last() {
+            Some(&c2) if (c as i16 - c2 as i16).abs() == 32 => { cs.pop(); },
+            _ => { cs.push(c); }
+        };
     }
-    input.len()
+    cs.len()
 }
