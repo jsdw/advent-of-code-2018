@@ -15,7 +15,6 @@ fn main() {
     println!("The sky says:");
     let mut within_range = false;
     for seconds in 1.. {
-
         // move each point by its velocity:
         for p in &mut points {
             p.position.0 += p.velocity.0;
