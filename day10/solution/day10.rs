@@ -12,7 +12,7 @@ fn main() {
         .map(parse_point)
         .collect();
 
-    println!("The sky says:");
+    println!("The sky says:\n");
     let mut within_range = false;
     for seconds in 1.. {
         // move each point by its velocity:
@@ -23,11 +23,11 @@ fn main() {
 
         // print them if they appear to be pretty close. End the loop
         // if they pass by and then stop being close:
-        let Bounds { top, bottom, left, right } = calculate_bounds(&points);
-        if bottom - top < 15 && right - left < 100 {
+        let Bounds { width, height, .. } = calculate_bounds(&points);
+        if height < 15 && width < 100 {
             within_range = true;
             print_points(&points);
-            println!("This will appear in {} seconds", seconds);
+            println!("\nThis will appear in {} seconds", seconds);
         } else if within_range {
             break;
         }
@@ -59,13 +59,11 @@ fn calculate_bounds(points: &[Point]) -> Bounds {
         left = i64::min(left, x);
         right = i64::max(right, x);
     }
-    Bounds { top, bottom, left, right }
+    Bounds { top, left, width: right-left+1, height: bottom-top+1 }
 }
 
 fn print_points(points: &[Point]) {
-    let Bounds { top, bottom, left, right } = calculate_bounds(points);
-    let height = bottom - top + 1;
-    let width = right - left + 1;
+    let Bounds { top, left, width, height } = calculate_bounds(points);
     let mut canvas = vec![false; height as usize * width as usize];
     for (x,y) in points.iter().map(|p| p.position) {
         let pos = (y-top) * width + (x-left);
@@ -78,7 +76,7 @@ fn print_points(points: &[Point]) {
     for row in canvas.chunks(width as usize) {
         let row: Vec<u8> = row
             .iter()
-            .map(|&b| if b { b'#' } else { b'.' })
+            .map(|&b| if b { b'#' } else { b' ' })
             .collect();
 
         handle.write_all(&row).expect("failed to write row");
@@ -95,7 +93,7 @@ struct Point {
 #[derive(Debug)]
 struct Bounds {
     top: i64,
-    bottom: i64,
     left: i64,
-    right: i64
+    width: i64,
+    height: i64
 }
