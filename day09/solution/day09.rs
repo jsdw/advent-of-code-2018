@@ -6,23 +6,19 @@ fn main() {
     println!("Star 2: {}", play_marbles(405, 7170000));
 }
 
-fn play_marbles(players: usize, last_points: u128) -> u128 {
+fn play_marbles(players: usize, last_marble: u128) -> u128 {
     let mut marbles = Ring::new(0);
     let mut scores = HashMap::new();
 
-    for (player,n) in (0..players).cycle().zip(0u128..last_points).skip(1) {
+    for (player,n) in (0..players).cycle().zip(0u128..last_marble).skip(1) {
         // every 23 moves, add points to the current player:
         if n != 0 && n % 23 == 0 {
-            let points = marbles.backward(6).remove_before().expect("marble expected") + n;
+            let points = marbles.backward(6).remove_before() + n;
             *scores.entry(player).or_insert(0) += points;
         }
         // else, go round one marble, add the next marble after it, then go to it:
         else {
             marbles.next().insert_after(n).next();
-        }
-        // end when the marble we're on equals the last_points value given:
-        if *marbles.value() == last_points {
-            break;
         }
     }
 
@@ -80,7 +76,7 @@ mod ring {
             self.nodes[next_idx].prev = new_idx;
             self
         }
-        pub fn remove_before(&mut self) -> Option<T> {
+        pub fn remove_before(&mut self) -> T {
             let prev_idx = self.nodes[self.idx].prev;
             if prev_idx == self.idx {
                 panic!("Cannot remove the last element");
@@ -92,7 +88,7 @@ mod ring {
             self.nodes[before_idx].next = self.idx;
 
             self.free.push(prev_idx);
-            self.nodes[prev_idx].value.take()
+            self.nodes[prev_idx].value.take().expect("value expected")
         }
         pub fn backward(&mut self, n: usize) -> &mut Self {
             (0..n).for_each(|_| { self.prev(); });
@@ -105,9 +101,6 @@ mod ring {
         pub fn prev(&mut self) -> &mut Self {
             self.idx = self.nodes[self.idx].prev;
             self
-        }
-        pub fn value(&self) -> &T {
-            self.nodes[self.idx].value.as_ref().unwrap()
         }
     }
 
