@@ -39,13 +39,7 @@ fn compute_cell(serial_no: usize, x: usize, y: usize) -> i32 {
     let rack_id = x + 10;
     let power_level = rack_id * y + serial_no;
     let power_level = power_level * rack_id;
-    let hundreds = power_level
-        .to_string()
-        .bytes()
-        .rev()
-        .nth(2)
-        .map(|c| c - 48) // map ascii num to actual num
-        .unwrap_or(0);
+    let hundreds = (power_level / 100) % 10;
     hundreds as i32 - 5
 }
 
