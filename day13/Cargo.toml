@@ -1,0 +1,11 @@
+[package]
+name = "day13"
+version = "0.1.0"
+edition = "2018"
+authors = ["James Wilson"]
+
+[[bin]]
+name = "day13"
+path = "solution/day13.rs"
+
+[dependencies]
