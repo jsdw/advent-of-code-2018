@@ -1,4 +1,3 @@
-
 fn main() {
 
     let input = 110201;
@@ -21,31 +20,24 @@ fn main() {
 // Create iterator over scores:
 fn scores(first: u8, second: u8) -> impl Iterator<Item=u8> {
 
-    let mut elf1_pos = 0;
-    let mut elf2_pos = 1;
+    let mut positions = [0,1];
     let mut scores = vec![first, second];
-
     let it = (0..).flat_map(move |_| {
-
-        let elf1_score = scores[elf1_pos];
-        let elf2_score = scores[elf2_pos];
-        let combined = elf1_score + elf2_score;
-
-        let ns = if combined > 9 {
+        let combined: u8 = positions.iter().map(|&p| scores[p]).sum();
+        let new_scores = if combined > 9 {
             vec![combined / 10, combined % 10]
         } else {
             vec![combined]
         };
 
-        for &s in &ns {
-            scores.push(s)
+        for &score in &new_scores {
+            scores.push(score)
+        }
+        for p in &mut positions {
+            *p = (*p + 1 + scores[*p] as usize) % scores.len();
         }
 
-        elf1_pos = (elf1_pos + 1 + elf1_score as usize) % scores.len();
-        elf2_pos = (elf2_pos + 1 + elf2_score as usize) % scores.len();
-
-        ns
-
+        new_scores
     });
 
     vec![first,second].into_iter().chain(it)
@@ -59,12 +51,11 @@ fn windowed<T: Clone>(n: usize, mut it: impl Iterator<Item=T>) -> impl Iterator<
     let producer = move |_| {
         if do_initial {
             do_initial = false;
-            for _ in 0..n {
-                if let Some(t) = it.next() {
-                    window.push(t)
-                } else {
-                    return None;
-                }
+            for t in it.by_ref().take(n) {
+                window.push(t);
+            }
+            if window.len() != n {
+                return None;
             }
         } else {
             if let Some(t) = it.next() {
@@ -81,6 +72,4 @@ fn windowed<T: Clone>(n: usize, mut it: impl Iterator<Item=T>) -> impl Iterator<
         .map(producer)
         .take_while(|n| n.is_some())
         .map(|n| n.unwrap())
-        .fuse()
-
 }
