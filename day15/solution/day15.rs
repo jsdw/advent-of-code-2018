@@ -166,7 +166,7 @@ mod battle {
                 }
 
                 // Attack if we're near enough to an enemy:
-                if let Some(enemy_coords) = self.adjacent_enemy_coords(coords, enemy_ty) {
+                if let Some(enemy_coords) = self.adjacent_unit_to_attack(coords, enemy_ty) {
                     let enemy = self.units.get_mut(&enemy_coords).unwrap();
                     enemy.health -= DAMAGE;
                     if enemy.health <= 0 {
@@ -192,16 +192,20 @@ mod battle {
             }
             elves == 0 || goblins == 0
         }
-        fn adjacent_enemy_coords(&self, coords: Coords, ty: UnitType) -> Option<Coords> {
+        fn adjacent_units(&self, coords: Coords, ty: UnitType) -> impl Iterator<Item=(Coords,Unit)> + '_ {
             coords.adjacent()
                 .into_iter()
-                .filter_map(|c| {
-                    let unit = self.units.get(&c)?;
+                .filter_map(move |c| {
+                    let unit = *self.units.get(&c)?;
                     if unit.ty != ty { return None };
-                    Some((unit.health, c))
+                    Some((c, unit))
                 })
-                .min_by_key(|(h,c)| (*h,*c)) // min health, then min coord if health tied.
-                .map(|(_,c)| c)
+        }
+        fn adjacent_unit_to_attack(&self, coords: Coords, ty: UnitType) -> Option<Coords> {
+            self.adjacent_units(coords, ty)
+                // when attacking, find unit with lowest health first, reading order if tie:
+                .min_by_key(|(c,unit)| (unit.health, *c))
+                .map(|(c,_)| c)
         }
         fn step_to_nearest_unit(&self, start_coords: Coords, ty: UnitType) -> Option<Coords> {
 
@@ -212,10 +216,11 @@ mod battle {
                 let mut current = vec![start_coords];
                 let mut maybe_next_to_enemy: Option<Coords> = None;
                 while !current.is_empty() {
-                    // enemies found? return the square with the min coords that's
-                    // adjacent to an enemy, if one exists yet.
+
+                    // Find all squares next to an enemy. pick the one that's
+                    // best for reading order:
                     maybe_next_to_enemy = current.iter()
-                        .filter(|c| self.adjacent_enemy_coords(**c, ty).is_some())
+                        .filter(|&c| self.adjacent_units(*c,ty).next().is_some())
                         .min()
                         .map(|&c| c);
                     if maybe_next_to_enemy.is_some() {
