@@ -1,96 +1,39 @@
-use self::battle::State;
+use self::battle::{State,Opts,UnitType::*};
 
 fn main() {
 
     let filename = std::env::args().nth(1).expect("need puzzle input");
     let input: String = std::fs::read_to_string(filename).expect("can't open file");
 
-    // This is a tricky puzzle, so run all of the provided samples on each try
+    // This is a tricky puzzle, so run all of the provided/found samples on each try
     // to make sure that any changes I make doesn't break anything obvious:
     run_tests();
 
-    // Run our "proper" input now:
-    let mut state = State::from_str(&input);
-    let mut round = 0;
-    println!("Initial State: \n\n{}", state);
-    while state.round() {
-        round += 1;
-        println!("After round {}:\n\n{}", round, state);
-    }
-    println!("Final State: \n\n{}", state);
-
-    // Get our answer back:
-    let total_health: i32 = state.units().map(|u| u.health).sum();
+    // Star 1: How many rounds would things last with damage of 3:
+    let (round, total_health) = run(&input, Opts::elf_damage(3));
     println!("Star 1: {} ({} rounds, {} health)",  total_health * round, round, total_health);
 
+    // Star 2: How much damage do elves have to be able to do to win without a single loss?
+    let mut outcome = 0;
+    'outer: for damage in 4.. {
+        let mut state = State::from_str(&input, Opts::elf_damage(damage));
+        let mut round = 0;
+        let elves_count = state.units().filter(|u| u.ty == Elf).count();
+        while state.round() {
+            round += 1;
+            if elves_count != state.units().filter(|u| u.ty == Elf).count() {
+                continue 'outer;
+            }
+        }
+        let total_health: i32 = state.units().map(|u| u.health).sum();
+        outcome = round * total_health;
+        break;
+    }
+    println!("Star 2: {}", outcome);
 }
 
-fn run_tests() {
-    assert_eq!(run(r"
-        #######
-        #.G...#
-        #...EG#
-        #.#.#G#
-        #..G#E#
-        #.....#
-        #######
-    "), (47, 590));
-
-    assert_eq!(run(r"
-        #######
-        #G..#E#
-        #E#E.E#
-        #G.##.#
-        #...#E#
-        #...E.#
-        #######
-    "), (37, 982));
-
-    assert_eq!(run(r"
-        #######
-        #E..EG#
-        #.#G.E#
-        #E.##E#
-        #G..#.#
-        #..E#.#
-        #######
-    "), (46, 859));
-
-    assert_eq!(run(r"
-        #######
-        #E.G#.#
-        #.#G..#
-        #G.#.G#
-        #G..#.#
-        #...E.#
-        #######
-    "), (35, 793));
-
-    assert_eq!(run(r"
-        #######
-        #.E...#
-        #.#..G#
-        #.###.#
-        #E#G#G#
-        #...#G#
-        #######
-    "), (54, 536));
-
-    assert_eq!(run(r"
-        #########
-        #G......#
-        #.E.#...#
-        #..##..G#
-        #...##..#
-        #...#...#
-        #.G...G.#
-        #.....G.#
-        #########
-    "), (20, 937));
-}
-
-fn run(s: &str) -> (i32,i32) {
-    let mut state = State::from_str(&s);
+fn run(s: &str, opts: Opts) -> (i32,i32) {
+    let mut state = State::from_str(&s, opts);
     let mut round = 0;
     while state.round() {
         round += 1;
@@ -105,15 +48,29 @@ mod battle {
     use self::UnitType::*;
 
     const STARTING_HEALTH: i32 = 200;
-    const DAMAGE: i32 = 3;
 
+    // Opts used to initialise State:
+    //
+    #[derive(Copy,Clone,Debug)]
+    pub struct Opts {
+        elf_damage: i32,
+    }
+
+    impl Opts {
+        pub fn elf_damage(d: i32) -> Opts {
+            Opts { elf_damage: d }
+        }
+    }
+
+    // Our game state:
+    //
     pub struct State {
         units: HashMap<Coords, Unit>,
         walls: HashSet<Coords>
     }
 
     impl State {
-        pub fn from_str(s: &str) -> State {
+        pub fn from_str(s: &str, opts: Opts) -> State {
             let mut units = HashMap::new();
             let mut walls = HashSet::new();
             for (y, line) in s.trim().lines().enumerate() {
@@ -121,8 +78,20 @@ mod battle {
                     let p = Coords{ x:x as i32, y:y as i32 };
                     match byte {
                         b'#' => { walls.insert(p); },
-                        b'E' => { units.insert(p, Unit{ ty:Elf, health:STARTING_HEALTH }); },
-                        b'G' => { units.insert(p, Unit{ ty:Goblin, health:STARTING_HEALTH }); },
+                        b'E' => {
+                            units.insert(p, Unit{
+                                ty:Elf,
+                                damage:opts.elf_damage,
+                                health:STARTING_HEALTH
+                            });
+                        },
+                        b'G' => {
+                            units.insert(p, Unit{
+                                ty:Goblin,
+                                damage:3,
+                                health:STARTING_HEALTH
+                            });
+                        },
                          _  => { /* ignore other bits */ }
                     }
                 }
@@ -133,6 +102,7 @@ mod battle {
 
             // Sort units by reading order so that we know how to progress:
             let mut unit_coords: Vec<Coords> = self.units.keys().cloned().collect();
+            let mut dead_units = HashSet::new();
             unit_coords.sort();
 
             // Bail out if there's going to be nothing to do:
@@ -143,11 +113,15 @@ mod battle {
             let mut finished_early = false;
             for mut coords in unit_coords {
 
+                // If the unit at these coords was recently killed,
+                // don't try to get it (you may succeed, but get a
+                // unit that's since moved into the free space!):
+                if dead_units.contains(&coords) {
+                    continue;
+                }
+
                 // Get unit (if it's not been killed!)
-                let unit = match self.units.get(&coords) {
-                    Some(unit) => *unit,
-                    None => continue
-                };
+                let unit = *self.units.get(&coords).expect("unit expected");
 
                 // Nothing left to do but we have at least one more unit to move,
                 // so bail out and make a note that the round failed to finish:
@@ -168,9 +142,10 @@ mod battle {
                 // Attack if we're near enough to an enemy:
                 if let Some(enemy_coords) = self.adjacent_unit_to_attack(coords, enemy_ty) {
                     let enemy = self.units.get_mut(&enemy_coords).unwrap();
-                    enemy.health -= DAMAGE;
+                    enemy.health -= unit.damage;
                     if enemy.health <= 0 {
                         self.units.remove(&enemy_coords);
+                        dead_units.insert(enemy_coords);
                         finished_early = self.is_finished();
                     }
                 }
@@ -180,7 +155,7 @@ mod battle {
         pub fn units(&self) -> impl Iterator<Item=Unit> + '_ {
             self.units.values().cloned()
         }
-        fn is_finished(&self) -> bool {
+        pub fn is_finished(&self) -> bool {
             let mut elves = 0;
             let mut goblins = 0;
             for unit in self.units.values() {
@@ -265,12 +240,11 @@ mod battle {
             };
             next_coords
         }
-        fn next_available_coords(&self, coords: Coords) -> Vec<Coords> {
+        fn next_available_coords<'a>(&'a self, coords: Coords) -> impl Iterator<Item=Coords> + 'a {
             coords.adjacent()
                 .into_iter()
-                .filter(|c| !self.walls.contains(c))
-                .filter(|c| !self.units.contains_key(c))
-                .collect()
+                .filter(move |c| !self.walls.contains(c))
+                .filter(move |c| !self.units.contains_key(c))
         }
     }
 
@@ -321,7 +295,6 @@ mod battle {
         x: i32
     }
     impl Coords {
-        // hand coords back in "reading order":
         pub fn adjacent(&self) -> Vec<Coords> {
             let Coords { x, y } = *self;
             vec![Coords{x:x,y:y-1}, Coords{x:x-1,y:y}, Coords{x:x+1,y:y}, Coords{x:x,y:y+1}]
@@ -331,7 +304,8 @@ mod battle {
     #[derive(Copy,Clone,Debug)]
     pub struct Unit {
         pub ty: UnitType,
-        pub health: i32
+        pub health: i32,
+        pub damage: i32
     }
 
     #[derive(Copy,Clone,Eq,PartialEq,Debug)]
@@ -340,5 +314,78 @@ mod battle {
         Goblin
     }
 
+}
 
+fn run_tests() {
+
+    let opts = Opts::elf_damage(3);
+
+    assert_eq!(run(r"
+        ####
+        ##E#
+        #GG#
+        ####
+    ", opts), (67, 200));
+
+    assert_eq!(run(r"
+        #######
+        #.G...#
+        #...EG#
+        #.#.#G#
+        #..G#E#
+        #.....#
+        #######
+    ", opts), (47, 590));
+
+    assert_eq!(run(r"
+        #######
+        #G..#E#
+        #E#E.E#
+        #G.##.#
+        #...#E#
+        #...E.#
+        #######
+    ", opts), (37, 982));
+
+    assert_eq!(run(r"
+        #######
+        #E..EG#
+        #.#G.E#
+        #E.##E#
+        #G..#.#
+        #..E#.#
+        #######
+    ", opts), (46, 859));
+
+    assert_eq!(run(r"
+        #######
+        #E.G#.#
+        #.#G..#
+        #G.#.G#
+        #G..#.#
+        #...E.#
+        #######
+    ", opts), (35, 793));
+
+    assert_eq!(run(r"
+        #######
+        #.E...#
+        #.#..G#
+        #.###.#
+        #E#G#G#
+        #...#G#
+        #######
+    ", opts), (54, 536));
+
+    assert_eq!(run(r"
+        #########
+        #G......#
+        #.E.#...#
+        #..##..G#
+        #...##..#
+        #...#...#
+        #.G...G.#
+        #.....G.#
+        #########
+    ", opts), (20, 937));
 }
