@@ -1,0 +1,13 @@
+[package]
+name = "day16"
+version = "0.1.0"
+edition = "2018"
+authors = ["James Wilson"]
+
+[[bin]]
+name = "day16"
+path = "solution/day16.rs"
+
+[dependencies]
+regex = "1"
+lazy_static = "1"
