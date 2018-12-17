@@ -222,63 +222,54 @@ mod battle {
                 .filter(move |c| !self.walls.contains(c))
                 .filter(move |c| !self.units.contains_key(c))
         }
-        fn step_to_nearest_unit(&self, start_coords: Coords, ty: UnitType) -> Option<Coords> {
+        fn find_nearest_coord(&self, start_coords: Coords, pick_end: impl Fn(&[Coords]) -> Option<Coords>) -> Option<Coords> {
+            let mut visited = HashSet::new();
+            visited.insert(start_coords);
+            let mut current = vec![start_coords];
+            while !current.is_empty() {
 
-            // Find the nearest enemy, recording the distance from start as we go:
-            let mut visited = HashMap::new();
-            visited.insert(start_coords, 0);
-            let next_to_enemy = {
-                let mut current = vec![start_coords];
-                let mut maybe_next_to_enemy: Option<Coords> = None;
-                while !current.is_empty() {
+                // Return when the condition is successful with the result of it:
+                if let Some(end_coord) = pick_end(&current) {
+                    return Some(end_coord);
+                }
 
-                    // Find all squares next to an enemy. pick the one that's
-                    // best for reading order:
-                    maybe_next_to_enemy = current.iter()
-                        .filter(|&c| self.adjacent_units(*c,ty).next().is_some())
-                        .min()
-                        .map(|&c| c);
-                    if maybe_next_to_enemy.is_some() {
-                        break;
-                    }
-
-                    // step our coords one square along and record:
-                    let mut next = vec![];
-                    for coord in current {
-                        let current_dist = *visited.get(&coord).unwrap();
-                        for next_coord in self.next_available_coords(coord) {
-                            if !visited.contains_key(&next_coord) {
-                                visited.insert(next_coord, current_dist+1);
-                                next.push(next_coord);
-                            }
+                // step our coords one square along and record:
+                let mut next = vec![];
+                for coord in current {
+                    for next_coord in self.next_available_coords(coord) {
+                        if !visited.contains(&next_coord) {
+                            visited.insert(next_coord);
+                            next.push(next_coord);
                         }
                     }
-                    current = next;
                 }
-                maybe_next_to_enemy?
-            };
+                current = next;
+            }
+            None
+        }
+        fn step_to_nearest_unit(&self, start_coords: Coords, ty: UnitType) -> Option<Coords> {
 
-            // Trace back from enemy square to beginning, forming a path that's
-            // the shortest possible and is the best reader order:
-            let next_coords = {
-                let mut path = vec![next_to_enemy];
-                loop {
-                    let coord = *path.last().unwrap();
-                    if coord == start_coords {
-                        break;
-                    }
-                    let next_coord = coord.adjacent()
-                        .into_iter()
-                        .filter(|c| visited.contains_key(c))
-                        // min distance. min coord if tied distance:
-                        .min_by_key(|c| (visited.get(c).unwrap(), *c))
-                        .expect("next expected");
-                    path.push(next_coord);
-                }
-                path.pop(); // remove the current location.
-                path.last().map(|&c| c) // use the one just after.
-            };
-            next_coords
+            // Find the best coord next to the closest enemy:
+            let next_to_enemy = self.find_nearest_coord(start_coords, |coords| {
+                coords.iter()
+                    .filter(|&c| self.adjacent_units(*c,ty).next().is_some())
+                    .min()
+                    .map(|&c| c)
+            })?;
+
+            // No need to move if the coord we want is our starting one:
+            if next_to_enemy == start_coords {
+                return None;
+            }
+
+            // Find the coord next to our input that's closest when moving from said enemy:
+            self.find_nearest_coord(next_to_enemy, |coords| {
+                coords.iter()
+                    .filter(|&c| c.adjacent().iter().any(|&adj| adj == start_coords))
+                    .min()
+                    .map(|&c| c)
+            })
+
         }
     }
 
