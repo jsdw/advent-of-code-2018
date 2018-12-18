@@ -1,9 +1,9 @@
 use self::interpreter::{ Inputs, Registers, Op, Instruction };
+use std::collections::{ HashMap, HashSet };
 use regex::Regex;
 use lazy_static::lazy_static;
 use std::error::Error;
 
-// macro_rules! err { ($($tt:tt)*) => { Box::<Error>::from(format!($($tt)*)) } }
 type Result<T> = std::result::Result<T, Box<dyn Error + 'static>>;
 
 fn main() -> Result<()> {
@@ -12,21 +12,80 @@ fn main() -> Result<()> {
     let input_string = std::fs::read_to_string(filename)?;
     let input: Input = parse_input(&input_string)?;
 
-    let like_3plus = input.observations
+    // count how many ops each opcode is seen to represent, and how many
+    // opcodes are seen three+ times (for Star 1):
+    let mut seen_codes = vec![HashMap::new();16];
+    let mut entries_seen_threeplus = 0;
+    for Observation{before,instruction,after} in input.observations {
+        let ops_seen = &mut seen_codes[instruction.opcode];
+        let mut ops_count = 0;
+
+        Op::all().filter(|&op| {
+            let ins = instruction.to_instruction(op);
+            after == before.apply_instruction(ins)
+        }).for_each(|op| {
+            *ops_seen.entry(op).or_insert(0) += 1;
+            ops_count += 1;
+        });
+
+        if ops_count >= 3 {
+            entries_seen_threeplus += 1;
+        }
+    }
+
+    // Collapse seen_codes down into a vec of sets, using counts to
+    // filter any ops not seen as often:
+    let mut seen_codes: Vec<HashSet<Op>> = seen_codes
+        .iter().map(|map| {
+            let max = *map.values().max().unwrap();
+            map.iter().filter(|t| *t.1 == max).map(|t| *t.0).collect()
+        }).collect();
+
+    // While there is still more than one possibility for each
+    // opcode, keep trying to cut it down:
+    let mut visited = HashSet::new();
+    loop {
+        let single_item = seen_codes
+            .iter()
+            .enumerate()
+            .filter(|(opcode,_)| !visited.contains(opcode))
+            .filter(|(_,s)| s.len() == 1)
+            .next();
+
+        match single_item {
+            None => break,
+            Some((opcode, set)) => {
+                let op = *set.iter().next().unwrap();
+                visited.insert(opcode);
+                seen_codes.iter_mut()
+                    .enumerate()
+                    .filter(|t| t.0 != opcode)
+                    .for_each(|t| { t.1.remove(&op); })
+            }
+        }
+    }
+
+    // We have a vector of sets containing (hopefully) one Op now; flatten
+    // to a single vec, blowing up if there is not at least one op per code:
+    let seen_codes: Vec<Op> = seen_codes
+        .into_iter()
+        .map(|mut s| s.drain().next().unwrap())
+        .collect();
+
+    // Convert the instructions provided into named instructions
+    // and run them on some blank registers:
+    let final_registers = input.instructions
         .iter()
-        .map(|&Observation{before,instruction,after}| {
-            Op::all().filter(|&op| {
-                let ins = Instruction{ op, inputs: instruction.inputs };
-                after == before.apply_instruction(ins)
-            }).count()
-        })
-        .filter(|&n| n >= 3)
-        .count();
-    println!("Star 1: {}", like_3plus);
+        .map(|ins| ins.to_instruction(seen_codes[ins.opcode]))
+        .fold(Registers::empty(), |r, ins| r.apply_instruction(ins));
+
+    println!("Star 1: {}", entries_seen_threeplus);
+    println!("Star 2: {}", final_registers.get(0));
 
     Ok(())
 }
 
+// Parse our input lines into observations and instructions:
 fn parse_input(s: &str) -> Result<Input> {
     lazy_static!{
         static ref before_re: Regex = Regex::new(r"^Before:\s+\[(\d+), (\d+), (\d+), (\d+)\]").unwrap();
@@ -87,6 +146,12 @@ pub struct RawInstruction {
     pub inputs: Inputs
 }
 
+impl RawInstruction {
+    fn to_instruction(&self, op: Op) -> Instruction {
+        Instruction { op, inputs: self.inputs }
+    }
+}
+
 impl From<[usize;4]> for RawInstruction {
     fn from(input: [usize;4]) -> RawInstruction {
         RawInstruction {
@@ -100,7 +165,9 @@ impl From<[usize;4]> for RawInstruction {
     }
 }
 
-// We handle interpreter specific stuff here:
+// Some of the logic for running instructions against
+// registers goes here. This is useful once we finally have
+// "real" instructions given the input:
 mod interpreter {
     use self::Op::*;
 
@@ -108,6 +175,9 @@ mod interpreter {
     pub struct Registers([usize;4]);
 
     impl Registers {
+        pub fn empty() -> Registers {
+            Registers([0;4])
+        }
         pub fn new(inputs: [usize;4]) -> Registers {
             Registers(inputs)
         }
@@ -124,7 +194,7 @@ mod interpreter {
                 Borr => { r[c] = r[a] | r[b] },
                 Bori => { r[c] = r[a] | b },
                 Setr => { r[c] = r[a] },
-                Seti => { r[a] = a },
+                Seti => { r[c] = a },
                 Gtir => { r[c] = if a > r[b] { 1 } else { 0 } },
                 Gtri => { r[c] = if r[a] > b { 1 } else { 0 } },
                 Gtrr => { r[c] = if r[a] > r[b] { 1 } else { 0 } },
@@ -134,8 +204,8 @@ mod interpreter {
             }
             Registers(r)
         }
-        pub fn into_array(self) -> [usize;4] {
-            self.0
+        pub fn get(&self, n: usize) -> usize {
+            self.0[n]
         }
     }
 
@@ -158,7 +228,7 @@ mod interpreter {
         pub c: usize
     }
 
-    #[derive(Copy,Clone,Debug)]
+    #[derive(Copy,Clone,Debug,PartialEq,Eq,Hash)]
     pub enum Op {
         Addr, Addi,
         Mulr, Muli,
@@ -182,5 +252,4 @@ mod interpreter {
             OPS.iter().cloned()
         }
     }
-
 }
