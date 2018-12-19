@@ -23,7 +23,7 @@ fn main() {
         round += 1;
         if round % 100 == 0 {
             println!("Round {}, water: {}", round, c);
-            print_region(&sim, 430..530, 200..300);
+            print_region(&sim, 430..530, 160..260);
         }
 
         if c == last_water_count {
@@ -164,7 +164,7 @@ mod simulation {
                 self.water.insert((x,y+1));
             }
         }
-        fn find_space_beside_water(&self, x:usize, y:usize) -> Option<(usize,usize)> {
+        fn find_space_beside_water(&self, x:usize, y:usize) -> (Option<(usize,usize)> {
             // find the next available space to the left and right, if any:
             let mut more_left  = true;
             let mut more_right = true;
@@ -196,21 +196,17 @@ mod simulation {
                 }
             }
 
-            // pick one of these spaces, prioritising one with something underneath it:
+            // pick one of these spaces, prioritising one with something underneath it.
+            // we add a bit of randomness to ensure all routes are eventually travelled.
             match (found_left, found_right) {
-                (None, _) => found_right,
-                (_, None) => found_left,
+                (None, Some(_)) => found_right,
+                (Some(_), None) => found_left,
+                (None, None) => None,
                 (Some((lx,ly)), Some((rx,ry))) => {
-                    let beneath_left
-                        =  self.walls.contains(&(lx,ly+1))
-                        || self.water.contains(&(lx,ly+1));
-                    let beneath_right
-                        =  self.walls.contains(&(rx,ry+1))
-                        || self.water.contains(&(rx,ry+1));
-                    match (beneath_left, beneath_right) {
-                        (true, _) => found_left,
-                        (_, true) => found_right,
-                        _ => found_left
+                    if rand::random() {
+                        found_left
+                    } else {
+                        found_right
                     }
                 }
             }

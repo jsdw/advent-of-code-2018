@@ -11,3 +11,4 @@ path = "solution/day17.rs"
 [dependencies]
 regex = "1"
 lazy_static = "1"
+rand = "0.6"
