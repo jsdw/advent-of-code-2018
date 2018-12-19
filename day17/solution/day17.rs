@@ -19,21 +19,25 @@ fn main() {
     let mut round = 0;
     loop {
         sim.step();
-        let c = sim.water().len();
-        round += 1;
-        if round % 100 == 0 {
-            println!("Round {}, water: {}", round, c);
-            print_region(&sim, 430..530, 160..260);
-        }
+        let c = sim.water_count();
+println!("Water: {}", c);
+    //if round % 1000 == 0 {
+    //    println!("Round {}", round);
+    //    println!("Round {}, water: {}\n{}", round, c, sim.stringify_region(400..700, 0..1800));
+    // }
 
+        round += 1;
         if c == last_water_count {
             break;
         } else {
             last_water_count = c;
         }
     }
+        println!("Round {}, water: {}\n{}", round, sim.water_count(), sim.stringify_region(400..700, 0..1800));
+
+
     let count_in_bounds = sim
-        .water()
+        .has_seen_water()
         .iter()
         .filter(|&&(_,y)| y >= top && y <= bottom )
         .count();
@@ -43,7 +47,7 @@ fn main() {
 
 fn draw_walls(lines: &[Line]) -> HashSet<(usize,usize)> {
     let mut walls = HashSet::new();
-    for mut line in lines.iter().cloned() {
+    for line in lines.iter().cloned() {
         for x in line.x {
             for y in line.y.clone() {
                 walls.insert((x,y));
@@ -72,28 +76,6 @@ fn parse_line(s: &str) -> Line {
     Line { x, y }
 }
 
-fn print_region(sim: &Simulation, xs: impl Iterator<Item=usize> + Clone, ys: impl Iterator<Item=usize>) -> Result<(),std::io::Error> {
-    use std::io::Write;
-    let stdout = std::io::stdout();
-    let mut handle = stdout.lock();
-    let water = sim.water();
-    let walls = sim.walls();
-    for y in ys {
-        for x in xs.clone() {
-            let c = if water.contains(&(x,y)) {
-                "~"
-            } else if walls.contains(&(x,y)) {
-                "#"
-            } else {
-                "."
-            };
-            write!(&mut handle, "{}", c)?;
-        }
-        writeln!(&mut handle)?;
-    }
-    Ok(())
-}
-
 #[derive(Debug,Clone)]
 struct Line {
     x: std::ops::RangeInclusive<usize>,
@@ -110,6 +92,8 @@ mod simulation {
         top: usize,
         bottom: usize,
         walls: HashSet<(usize,usize)>,
+        stuck_water: HashSet<(usize,usize)>,
+        has_seen_water: HashSet<(usize,usize)>,
         water: HashSet<(usize,usize)>
     }
 
@@ -118,22 +102,26 @@ mod simulation {
             let top = walls.iter().map(|(x,_)| *x).min().unwrap_or(0);
             let bottom = walls.iter().map(|(_,y)| *y).max().unwrap_or(0);
             let water = HashSet::new();
-            Simulation{ water_x, walls, top, bottom, water }
+            let stuck_water = HashSet::new();
+            let has_seen_water = HashSet::new();
+            Simulation{ water_x, walls, top, bottom, water, stuck_water, has_seen_water }
         }
         pub fn step(&mut self) {
             let mut water_coords: Vec<(usize,usize)> = self.water.iter().cloned().collect();
             // move water from the bottom up:
             water_coords.sort_unstable_by(|(_,y1),(_,y2)| y1.cmp(y2).reverse());
             for (x,y) in water_coords {
-                self.step_water(x,y)
+                visited.insert((x,y));
+                self.step_water(x,y);
             }
             self.water.insert((self.water_x,0));
+            self.has_seen_water.insert((self.water_x,0));
         }
         pub fn walls(&self) -> &HashSet<(usize,usize)> {
             &self.walls
         }
-        pub fn water(&self) -> &HashSet<(usize,usize)> {
-            &self.water
+        pub fn water_count(&self) -> usize {
+            self.has_seen_water.iter().count()
         }
         pub fn top(&self) -> usize {
             self.top
@@ -141,30 +129,38 @@ mod simulation {
         pub fn bottom(&self) -> usize {
             self.bottom
         }
+        pub fn has_seen_water(&self) -> &HashSet<(usize,usize)> {
+            &self.has_seen_water
+        }
         fn step_water(&mut self, x:usize,y:usize) {
             // water is at bottom of grid so it falls off:
             if y >= self.bottom {
                 self.water.remove(&(x,y));
-                return;
             }
             // wall beneath water, so can't move:
             else if self.walls.contains(&(x,y+1)) {
-                return;
+                self.water.remove(&(x,y));
+                self.stuck_water.insert((x,y)); // water will never move again.
             }
             // water beneath water so try to fall beside:
-            else if self.water.contains(&(x,y+1)) {
+            else if self.water.contains(&(x,y+1)) || self.stuck_water.contains(&(x,y+1)) {
                 if let Some((nx,ny)) = self.find_space_beside_water(x,y+1) {
                     self.water.remove(&(x,y));
                     self.water.insert((nx,ny));
+                    self.has_seen_water.insert((nx,ny));
+                } else {
+                    self.water.remove(&(x,y));
+                    self.stuck_water.insert((x,y)); // water will never move again.
                 }
             }
             // nothing beneath water so move it down one:
             else {
                 self.water.remove(&(x,y));
                 self.water.insert((x,y+1));
+                self.has_seen_water.insert((x,y+1));
             }
         }
-        fn find_space_beside_water(&self, x:usize, y:usize) -> (Option<(usize,usize)> {
+        fn find_space_beside_water(&self, x:usize, y:usize) -> Option<(usize,usize)> {
             // find the next available space to the left and right, if any:
             let mut more_left  = true;
             let mut more_right = true;
@@ -176,7 +172,7 @@ mod simulation {
                 if more_left {
                     if self.walls.contains(&(x_left, y)) {
                         more_left = false;
-                    } else if self.water.contains(&(x_left, y)) {
+                    } else if self.water.contains(&(x_left, y)) || self.stuck_water.contains(&(x_left, y)) {
                         if x_left == 0 { more_left = false }
                         else { x_left -= 1 }
                     } else {
@@ -187,7 +183,7 @@ mod simulation {
                 if more_right {
                     if self.walls.contains(&(x_right, y)) {
                         more_right = false;
-                    } else if self.water.contains(&(x_right, y)) {
+                    } else if self.water.contains(&(x_right, y)) || self.stuck_water.contains(&(x_right, y)) {
                         x_right += 1;
                     } else {
                         more_right = false;
@@ -202,7 +198,7 @@ mod simulation {
                 (None, Some(_)) => found_right,
                 (Some(_), None) => found_left,
                 (None, None) => None,
-                (Some((lx,ly)), Some((rx,ry))) => {
+                (Some(_), Some(_)) => {
                     if rand::random() {
                         found_left
                     } else {
@@ -210,6 +206,25 @@ mod simulation {
                     }
                 }
             }
+        }
+        pub fn stringify_region(&self, xs: impl Iterator<Item=usize> + Clone, ys: impl Iterator<Item=usize>) -> String {
+            let mut out = String::new();
+            for y in ys {
+                for x in xs.clone() {
+                    let c = if self.water.contains(&(x,y)) {
+                        '|'
+                    } else if self.stuck_water.contains(&(x,y)) {
+                        '~'
+                    } else if self.walls.contains(&(x,y)) {
+                        '#'
+                    } else {
+                        '.'
+                    };
+                    out.push(c);
+                }
+                out.push('\n');
+            }
+            out
         }
     }
 }
