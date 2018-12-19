@@ -1,5 +1,5 @@
-use self::grid::Grid;
-use self::simulation::{Simulation,Item};
+use std::collections::HashSet;
+use self::simulation::Simulation;
 use regex::Regex;
 use lazy_static::lazy_static;
 
@@ -11,40 +11,46 @@ fn main() {
         .map(parse_line)
         .collect();
 
-    let grid = draw_lines(&lines);
-    let mut sim = Simulation::new(grid, 500);
+    let walls = draw_walls(&lines);
+    let mut sim = Simulation::new(walls, 500);
+    let top = sim.top();
+    let bottom = sim.bottom();
     let mut last_water_count = 0;
+    let mut round = 0;
     loop {
         sim.step();
-        let c = sim
-            .grid()
-            .values()
-            .filter(|(_,v)| **v == Item::Water)
-            .count();
+        let c = sim.water().len();
+        round += 1;
+        if round % 100 == 0 {
+            println!("Round {}, water: {}", round, c);
+            print_region(&sim, 430..530, 200..300);
+        }
+
         if c == last_water_count {
             break;
         } else {
             last_water_count = c;
         }
     }
-    println!("Star 1: {}", last_water_count);
+    let count_in_bounds = sim
+        .water()
+        .iter()
+        .filter(|&&(_,y)| y >= top && y <= bottom )
+        .count();
+    println!("Star 1: {}", count_in_bounds);
 
 }
 
-fn draw_lines(lines: &[Line]) -> Grid<Item> {
-    let (w,h) = lines.iter().fold((0,0), |(w,h), line| {
-        (w.max(*line.x.end()), h.max(*line.y.end()))
-    });
-
-    let mut grid = Grid::new(w+2,h+1,Item::Empty);
+fn draw_walls(lines: &[Line]) -> HashSet<(usize,usize)> {
+    let mut walls = HashSet::new();
     for mut line in lines.iter().cloned() {
-        for x in &mut line.x {
-            for y in &mut line.y {
-                grid[(x,y)] = Item::Wall;
+        for x in line.x {
+            for y in line.y.clone() {
+                walls.insert((x,y));
             }
         }
     }
-    grid
+    walls
 }
 
 fn parse_line(s: &str) -> Line {
@@ -66,6 +72,28 @@ fn parse_line(s: &str) -> Line {
     Line { x, y }
 }
 
+fn print_region(sim: &Simulation, xs: impl Iterator<Item=usize> + Clone, ys: impl Iterator<Item=usize>) -> Result<(),std::io::Error> {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+    let water = sim.water();
+    let walls = sim.walls();
+    for y in ys {
+        for x in xs.clone() {
+            let c = if water.contains(&(x,y)) {
+                "~"
+            } else if walls.contains(&(x,y)) {
+                "#"
+            } else {
+                "."
+            };
+            write!(&mut handle, "{}", c)?;
+        }
+        writeln!(&mut handle)?;
+    }
+    Ok(())
+}
+
 #[derive(Debug,Clone)]
 struct Line {
     x: std::ops::RangeInclusive<usize>,
@@ -75,155 +103,117 @@ struct Line {
 // A simple water simulation:
 //
 mod simulation {
-    use crate::grid::Grid;
+    use std::collections::HashSet;
 
     pub struct Simulation {
         water_x: usize,
-        grid: Grid<Item>
+        top: usize,
+        bottom: usize,
+        walls: HashSet<(usize,usize)>,
+        water: HashSet<(usize,usize)>
     }
 
     impl Simulation {
-        pub fn new(grid: Grid<Item>, water_x: usize) -> Simulation {
-            Simulation{ water_x, grid }
+        pub fn new(walls: HashSet<(usize,usize)>, water_x: usize) -> Simulation {
+            let top = walls.iter().map(|(x,_)| *x).min().unwrap_or(0);
+            let bottom = walls.iter().map(|(_,y)| *y).max().unwrap_or(0);
+            let water = HashSet::new();
+            Simulation{ water_x, walls, top, bottom, water }
         }
         pub fn step(&mut self) {
-            // move each water square if possible:
-            for y in self.grid.height()-1 .. 0 {
-                for x in self.grid.width()-1 .. 0 {
-                    self.step_square(x,y);
-                }
+            let mut water_coords: Vec<(usize,usize)> = self.water.iter().cloned().collect();
+            // move water from the bottom up:
+            water_coords.sort_unstable_by(|(_,y1),(_,y2)| y1.cmp(y2).reverse());
+            for (x,y) in water_coords {
+                self.step_water(x,y)
             }
-            // add some water if possible:
-            match self.grid[(self.water_x,0)] {
-                Item::Empty => {
-                    self.grid[(self.water_x,0)] = Item::Water;
-                },
-                Item::Water => {
-                    if let Some((nx,ny)) = self.find_space_beside_water(self.water_x, 0) {
-                        self.grid[(nx,ny)] = Item::Water;
-                    }
-                },
-                Item::Wall => {
-                    panic!("Water hole is a wall!");
-                }
-            }
+            self.water.insert((self.water_x,0));
         }
-        pub fn grid(&self) -> &Grid<Item> {
-            &self.grid
+        pub fn walls(&self) -> &HashSet<(usize,usize)> {
+            &self.walls
         }
-        fn step_square(&mut self, x:usize,y:usize) {
-            // square isn't water so do nothing:
-            if self.grid[(x,y)] != Item::Water {
+        pub fn water(&self) -> &HashSet<(usize,usize)> {
+            &self.water
+        }
+        pub fn top(&self) -> usize {
+            self.top
+        }
+        pub fn bottom(&self) -> usize {
+            self.bottom
+        }
+        fn step_water(&mut self, x:usize,y:usize) {
+            // water is at bottom of grid so it falls off:
+            if y >= self.bottom {
+                self.water.remove(&(x,y));
                 return;
             }
-            // square is at bottom of grid so it falls off:
-            if y >= self.grid.height() - 1 {
-                self.grid[(x,y)] = Item::Empty;
+            // wall beneath water, so can't move:
+            else if self.walls.contains(&(x,y+1)) {
                 return;
             }
-            match self.grid[(x,y+1)] {
-                // square below is wall so can't move:
-                Item::Wall => {
-                    return;
-                },
-                // square below is empty so move water there:
-                Item::Empty => {
-                    self.grid[(x,y)] = Item::Empty;
-                    self.grid[(x,y+1)] = Item::Water;
-                },
-                // square below is water so see if we can fall beside it:
-                Item::Water => {
-                    if let Some((nx,ny)) = self.find_space_beside_water(x,y+1) {
-                        self.grid[(x,y)] = Item::Empty;
-                        self.grid[(nx,ny)] = Item::Water;
-                    }
+            // water beneath water so try to fall beside:
+            else if self.water.contains(&(x,y+1)) {
+                if let Some((nx,ny)) = self.find_space_beside_water(x,y+1) {
+                    self.water.remove(&(x,y));
+                    self.water.insert((nx,ny));
                 }
+            }
+            // nothing beneath water so move it down one:
+            else {
+                self.water.remove(&(x,y));
+                self.water.insert((x,y+1));
             }
         }
         fn find_space_beside_water(&self, x:usize, y:usize) -> Option<(usize,usize)> {
-            // *** Prioritise spaces with water or wall beneath them over empty spaces ***
-            let max_x = self.grid.width() - 1;
-            let mut no_more_left  = false;
-            let mut no_more_right = false;
+            // find the next available space to the left and right, if any:
+            let mut more_left  = true;
+            let mut more_right = true;
             let mut x_left  = x;
             let mut x_right = x;
-            while !no_more_left || !no_more_right {
-                if !no_more_left {
-                    match self.grid[(x_left, y)] {
-                        Item::Empty => { return Some((x_left, y)) },
-                        Item::Wall => { no_more_left = true; },
-                        Item::Water => { if x_left == 0 { no_more_left = true } else { x_left -= 1 } }
+            let mut found_left = None;
+            let mut found_right = None;
+            while more_left || more_right {
+                if more_left {
+                    if self.walls.contains(&(x_left, y)) {
+                        more_left = false;
+                    } else if self.water.contains(&(x_left, y)) {
+                        if x_left == 0 { more_left = false }
+                        else { x_left -= 1 }
+                    } else {
+                        more_left = false;
+                        found_left = Some((x_left, y));
                     }
                 }
-                if !no_more_right {
-                    match self.grid[(x_right,y)] {
-                        Item::Empty => { return Some((x_right, y)) },
-                        Item::Wall => { no_more_right = true; },
-                        Item::Water => { if x_right == max_x { no_more_right = true } else { x_right += 1 } }
+                if more_right {
+                    if self.walls.contains(&(x_right, y)) {
+                        more_right = false;
+                    } else if self.water.contains(&(x_right, y)) {
+                        x_right += 1;
+                    } else {
+                        more_right = false;
+                        found_right = Some((x_right, y));
                     }
                 }
             }
-            None
-        }
-    }
 
-    #[derive(Debug,Copy,Clone,PartialEq,Eq)]
-    pub enum Item {
-        Wall,
-        Water,
-        Empty
-    }
-
-}
-
-// A simple 2D grid:
-//
-mod grid {
-
-    pub struct Grid<T> {
-        width: usize,
-        height: usize,
-        values: Vec<T>
-    }
-
-    impl <T> Grid<T> {
-        pub fn new(width: usize, height: usize, value: T) -> Grid<T>
-        where T: Clone {
-            Grid {
-                width,
-                height,
-                values: vec![value; width * height]
+            // pick one of these spaces, prioritising one with something underneath it:
+            match (found_left, found_right) {
+                (None, _) => found_right,
+                (_, None) => found_left,
+                (Some((lx,ly)), Some((rx,ry))) => {
+                    let beneath_left
+                        =  self.walls.contains(&(lx,ly+1))
+                        || self.water.contains(&(lx,ly+1));
+                    let beneath_right
+                        =  self.walls.contains(&(rx,ry+1))
+                        || self.water.contains(&(rx,ry+1));
+                    match (beneath_left, beneath_right) {
+                        (true, _) => found_left,
+                        (_, true) => found_right,
+                        _ => found_left
+                    }
+                }
             }
         }
-        pub fn width(&self) -> usize {
-            self.width
-        }
-        pub fn height(&self) -> usize {
-            self.height
-        }
-        pub fn values(&self) -> impl Iterator<Item=((usize,usize),&T)> {
-            (0..self.height).flat_map(move |y| {
-                (0..self.width).map(move |x| ((x,y),&self.values[y * self.width + x]))
-            }).rev()
-        }
-        // pub fn values_mut<'a>(&'a mut self) -> impl Iterator<Item=((usize,usize),&'a mut T)> + 'a {
-        //     (0..self.height).flat_map(move |y| {
-        //         (0..self.width).map(move |x| ((x,y),&mut self.values[y * self.width + x]))
-        //     }).rev()
-        // }
-
     }
-
-    impl <T> std::ops::Index<(usize,usize)> for Grid<T> {
-        type Output = T;
-        fn index(&self, (x,y): (usize,usize)) -> &T {
-            &self.values[y * self.width + x]
-        }
-    }
-    impl <T> std::ops::IndexMut<(usize,usize)> for Grid<T> {
-        fn index_mut(&mut self, (x,y): (usize,usize)) -> &mut T {
-            &mut self.values[y * self.width + x]
-        }
-    }
-
 }
