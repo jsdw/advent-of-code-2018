@@ -1,0 +1,140 @@
+#ip 1
+
+var r0 = 1
+var r1 = 0
+var r2 = 0
+var r3 = 0
+var r4 = 0
+var r5 = 0
+
+r1 = 16 // [GOTO LINE17]
+r3 = 1 // [:LINE1]
+r5 = 1 // [:LINE2]
+r4 = r3 * r5 // [:LINE3]
+r4 = r4 == r2 ? 1 : 0
+r1 = r4 + r1 // [GOTO r4 == r2 ? LINE7 : LINE8]
+r1 = r1 + 1 // [GOTO LINE8]
+r0 = r3 + r0 // [:LINE7]
+r5 = r5 + 1 // [:LINE8]
+r4 = r5 > r2 ? 1 : 0
+r1 = r1 + r4 // [GOTO r5 > r2 ? LINE12 : LINE3]
+r1 = 2 // [GOTO LINE3]
+r3 = r3 + 1 // [:LINE12]
+r4 = r3 > r2 ? 1 : 0
+r1 = r4 + r1 // [GOTO r3 > r2 ? END : LINE2]
+r1 = 1 // [GOTO LINE2]
+r1 = r1 * r1 // END
+r2 = 2 // [:LINE17]
+r2 = r2 * r2
+r2 = r1 * r2 // r1 == 19
+r2 = r2 * 11
+r4 = r4 + 7
+r4 = r4 * r1 // r1 == 22
+r4 = r4 + 13
+r2 = r2 + r4
+r1 = r1 + r0 // REL GOTO
+r1 = 0 // [GOTO LINE1]
+r4 = r1
+r4 = r4 * r1
+r4 = r1 + r4
+r4 = r1 * r4
+r4 = r4 * 14
+r4 = r4 * r1
+r2 = r2 + r4
+r0 = 0
+r1 = 0 // [GOTO LINE1]
+
+//
+//
+// second pass:
+//
+//
+
+var r0 = 1
+var r1 = 0 //
+var r2 = 0
+var r3 = 0
+var r4 = 0
+var r5 = 0
+
+r2 = 2
+r2 = r2 * r2
+r2 = r1 * r2
+r2 = r2 * 11
+r4 = r4 + 7
+r4 = r4 * r1
+r4 = r4 + 13
+r2 = r2 + r4
+
+// this is the additional work that makes it way harder:
+r4 = r1
+r4 = r4 * r1
+r4 = r1 + r4
+r4 = r1 * r4
+r4 = r4 * 14
+r4 = r4 * r1
+r2 = r2 + r4
+r0 = 0
+
+r3 = 1 // [:LINE1]
+r5 = 1 // [:LINE2]
+r4 = r3 * r5 // [:LINE3]
+
+if r4 == r2 {
+    r0 = r3 + r0
+}
+
+r5 = r5 + 1
+r4 = r5 > r2 ? 1 : 0
+GOTO r5 > r2 ? LINE12 : LINE3
+GOTO LINE3
+r3 = r3 + 1 // [:LINE12]
+r4 = r3 > r2 ? 1 : 0
+GOTO r3 > r2 ? END : LINE2
+
+//
+//
+// Third pass
+//
+//
+
+var r0 = 0
+var r1 = 0
+var r2 = 10551403
+var r3 = 0
+var r4 = 10550400
+var r5 = 0
+
+r3 = 1 // [:LINE1]
+r5 = 1 // [:LINE2]
+
+if r3 * r5 == r2 { [:LINE3]
+    r0 = r3 + r0
+}
+r5 = r5 + 1
+GOTO r5 > r2 ? LINE12 : LINE3
+
+r3 = r3 + 1 // [:LINE12]
+r4 = r3 > r2 ? 1 : 0
+GOTO r3 > r2 ? END : LINE2
+
+//
+//
+// Fourth pass
+//
+//
+
+var total = 0;
+var num = 10551403;
+var a = 1;
+while (a <= num) {
+    var b = 1;
+    while (b <= num) {
+        if (a * b == num) {
+            total = a + total // summing the factors!
+        }
+        b++;
+    }
+    a++;
+}
+
