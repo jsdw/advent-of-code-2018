@@ -2,7 +2,7 @@ use crate::regex::{ Regex, Direction };
 // use crate::list::List;
 use std::error::Error;
 use std::result;
-use std::collections::{ HashSet, HashMap };
+use std::collections::HashMap;
 
 macro_rules! err { ($($tt:tt)*) => { Box::<$crate::Error>::from(format!($($tt)*)) } }
 pub type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
@@ -14,13 +14,11 @@ fn main() -> Result<()> {
     let re = Regex::new(&input)?;
     assert_eq!(re.to_string(), input); // confirm that our parsing is good.
 
-    // Draw out the doors and distances (number of doors crossed):
-    let mut doors = HashSet::new();
+    // Count up distances to each room:
     let mut distances = HashMap::new();
     steps(&re, vec![(0,0)], &mut |(ox,oy), (nx,ny)| {
         let last_dist = *distances.get(&(ox,oy)).unwrap_or(&0);
         distances.entry((nx,ny)).or_insert(last_dist+1);
-        doors.insert(((ox+nx)/2,(oy+ny)/2));
     });
 
     let furthest = distances.values().max().unwrap();
