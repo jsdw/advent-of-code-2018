@@ -1,6 +1,8 @@
-use crate::regex::Regex;
+use crate::regex::{ Regex, Direction };
+// use crate::list::List;
 use std::error::Error;
 use std::result;
+use std::collections::{ HashSet, HashMap };
 
 macro_rules! err { ($($tt:tt)*) => { Box::<$crate::Error>::from(format!($($tt)*)) } }
 pub type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
@@ -12,18 +14,72 @@ fn main() -> Result<()> {
     let re = Regex::new(&input)?;
     assert_eq!(re.to_string(), input); // confirm that our parsing is good.
 
+    // Draw out the doors and distances (number of doors crossed):
+    let mut doors = HashSet::new();
+    let mut distances = HashMap::new();
+    steps(&re, vec![(0,0)], &mut |(ox,oy), (nx,ny)| {
+        let last_dist = *distances.get(&(ox,oy)).unwrap_or(&0);
+        distances.entry((nx,ny)).or_insert(last_dist+1);
+        doors.insert(((ox+nx)/2,(oy+ny)/2));
+    });
+
+    let furthest = distances.values().max().unwrap();
+    println!("Star 1: {}", furthest);
+
+    let distant = distances.values().filter(|&&v| v >= 1000).count();
+    println!("Star 2: {}", distant);
+
     Ok(())
+}
+
+fn steps(re: &Regex, mut tails: Vec<(i64,i64)>, func: &mut impl FnMut((i64,i64), (i64,i64))) -> Vec<(i64,i64)> {
+    tails.sort_unstable();
+    tails.dedup();
+    match re {
+        Regex::And(regexs) => {
+            for re in regexs {
+                tails = steps(re, tails, func);
+            }
+            tails
+        },
+        Regex::Or(regexs, is_optional) => {
+            let mut all_paths = if *is_optional {
+                tails.clone()
+            } else {
+                vec![]
+            };
+            for re in regexs {
+                all_paths.append(&mut steps(re, tails.clone(), func));
+            }
+            all_paths
+        },
+        Regex::Value(values) => {
+            for tail in &mut tails {
+                for val in values {
+                    let (x,y) = *tail;
+                    let new_tail = match val {
+                        Direction::N => (x, y-2),
+                        Direction::E => (x+2, y),
+                        Direction::S => (x, y+2),
+                        Direction::W => (x-2, y)
+                    };
+                    func((x,y), new_tail);
+                    *tail = new_tail;
+                }
+            }
+            tails
+        }
+    }
 }
 
 mod regex {
 
     use super::Result;
 
-    #[derive(Debug)]
+    #[derive(Debug,PartialEq,Eq,Clone)]
     pub enum Regex {
         And(Vec<Regex>),
-        Or(Vec<Regex>),
-        Optional(Box<Regex>),
+        Or(Vec<Regex>, bool),
         Value(Vec<Direction>)
     }
 
@@ -40,7 +96,7 @@ mod regex {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug,PartialEq,Eq,Clone,Copy)]
     pub enum Direction {
         N, E, S, W
     }
@@ -64,7 +120,7 @@ mod regex {
                     break; // end of the AND; break.
                 },
                 b'(' => {
-                    let (val, rest) = parse_regex_optional(s)?;
+                    let (val, rest) = parse_regex_or(s)?;
                     bits.push(val);
                     s = rest;
                 },
@@ -75,23 +131,24 @@ mod regex {
                 }
             }
         }
-        let res = if bits.len() == 1 {
-            bits.remove(0)
-        } else {
-            Regex::And(bits)
-        };
-        Ok((res, s))
+        Ok((Regex::And(bits), s))
     }
 
     fn parse_regex_or(mut s: &[u8]) -> Result<(Regex,&[u8])> {
         let mut bits = vec![];
+        let mut is_optional = false;
+        s = &s[1..]; // ignore first (
         while let Some(c) = s.first() {
             match c {
                 b')' => {
+                    s = &s[1..];
                     break; // end of the OR; break.
                 },
                 b'|' => {
                     s = &s[1..];
+                    if let Some(b')') = s.first() {
+                        is_optional = true;
+                    }
                 },
                 _ => {
                     let (val, rest) = parse_regex_and(s)?;
@@ -100,22 +157,7 @@ mod regex {
                 }
             }
         }
-        Ok((Regex::Or(bits), s))
-    }
-
-    fn parse_regex_optional(s: &[u8]) -> Result<(Regex,&[u8])> {
-        if s.len() < 2 {
-            Err(err!("Expecting at least '(' and ')' but not enough input"))
-        } else if s[0] != b'(' {
-            Err(err!("Optional expecting to start with '('"))
-        } else {
-            let (val, rest) = parse_regex_or(&s[1..])?;
-            if rest[0] != b')' {
-                Err(err!("Optional expecting to end with ')', got '{}'", rest[0] as char))
-            } else {
-                Ok((Regex::Optional(Box::new(val)),&rest[1..]))
-            }
-        }
+        Ok((Regex::Or(bits, is_optional), s))
     }
 
     fn parse_regex_value(mut s: &[u8]) -> Result<(Regex,&[u8])> {
@@ -151,16 +193,12 @@ mod regex {
                     stringify_regex(r, buf);
                 }
             },
-            Regex::Or(rs) => {
-                let needs_pipe = rs.len() == 1;
+            Regex::Or(rs, is_optional) => {
+                buf.push('(');
                 for (i,r) in rs.iter().enumerate() {
                     stringify_regex(r, buf);
-                    if needs_pipe || i < rs.len()-1 { buf.push('|') }
+                    if *is_optional || i < rs.len()-1 { buf.push('|') }
                 }
-            },
-            Regex::Optional(r) => {
-                buf.push('(');
-                stringify_regex(r, buf);
                 buf.push(')');
             },
             Regex::Value(ds) => {
