@@ -54,21 +54,7 @@ mod solver {
             }
         }
         pub fn solve(&mut self) -> usize {
-            let mut rounds = 0;
-            while self.step() {
-                // This takes a while, so print information to stderr
-                // to help keep track of what's going on:
-                if rounds % 1000000 == 0 {
-                    let best = if self.best_time == std::usize::MAX { 
-                        "unknown".to_owned() 
-                    } else { 
-                        self.best_time.to_string() 
-                    };
-                    eprintln!("Rounds: {} (best time so far: {}, states: {})", 
-                        rounds, best, self.current.len());
-                }
-                rounds += 1;
-            }
+            while self.step() { }
             self.best_time
         }
         fn step(&mut self) -> bool {
@@ -79,19 +65,17 @@ mod solver {
             };
 
             // Get next potential states from first in list:
-            let mut next_potential = first.possible_moves(self.cave);
             let target = self.cave.target();
-
-            // Sort by lowest distance+time-spent-so-far (reversed because
-            // we want to order best things to the back):
-            next_potential.sort_unstable_by_key(|s| {
-                let distance = manhatten_distance(s.position, target);
-                Reverse(distance + s.time_spent)
-            });
 
             // Keep exploring these states if they havent finished and
             // still have a chance to exceed the best time:
-            for s in next_potential {
+            for s in first.possible_moves(self.cave) {
+
+                // // This line speeds the solver up about 10x (~250ms) but no longer
+                // // absolutely guarantees a solution, so it's commented out:
+                // if s.position.0 > target.0 * 3 || s.position.1 > target.1 * 3 {
+                //     continue;
+                // }
 
                 // Ignore potential states that could never beat the best:
                 let distance = manhatten_distance(s.position, target);
@@ -101,9 +85,7 @@ mod solver {
 
                 // We're done! have we beaten the best?
                 if distance == 0 && s.tool == Torch {
-                    if self.best_time > s.time_spent {
-                        self.best_time = s.time_spent;
-                    }
+                    self.best_time = self.best_time.min(s.time_spent);
                     continue;
                 }
 
@@ -119,7 +101,15 @@ mod solver {
 
                 // This state has a chance, so add it to the list!
                 self.current.push(s);
+
             }
+
+            // Sort by lowest distance+time-spent-so-far (reversed because
+            // we want to order best things to the back):
+            self.current.sort_unstable_by_key(|s| {
+                let distance = manhatten_distance(s.position, target);
+                Reverse(distance + s.time_spent)
+            });
 
             true
         }
@@ -148,7 +138,7 @@ mod solver {
             }
         }
         fn possible_moves(&self, cave: &Cave) -> Vec<State> {
-            let mut moves = vec![];
+            let mut moves = Vec::with_capacity(5);
             let ty = cave.get(self.position);
             
             // We can change tool to applicable ones:
@@ -189,7 +179,9 @@ mod solver {
     }
 
     fn surrounding_coords((x,y): (usize,usize)) -> Vec<(usize,usize)> {
-        let mut next = vec![(x+1, y), (x,y+1)];
+        let mut next = Vec::with_capacity(4);
+        next.push((x+1,y));
+        next.push((x,y+1));
         if x > 0 { next.push((x-1,y)) }
         if y > 0 { next.push((x,y-1)) }
         next
