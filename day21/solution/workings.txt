@@ -1,0 +1,193 @@
+var r0 = X;
+var r1 = 0; // instruction counter
+var r2 = 0;
+var r3 = 0;
+var r4 = 0;
+var r5 = 0;
+
+r4 = 123 // seti 123 0 4
+r4 = r4 & 456 //  bani 4 456 4
+r4 = r4 == 72 ? 1 : 0 // eqri 4 72 4
+r1 = r4 + r1 // addr 4 1 1
+r1 = 0 // seti 0 0 1
+r4 = 0 // seti 0 1 4
+r3 = r4 | 65536 // bori 4 65536 3
+r4 = 3730679 // seti 3730679 4 4
+r5 = r3 & 255 // bani 3 255 5
+r4 = r4 + r5 // addr 4 5 4
+r4 = r4 & 16777215 // bani 4 16777215 4
+r4 = r4 * 65899 // muli 4 65899 4
+r4 = r4 & 16777215 // bani 4 16777215 4
+r5 = 256 > r3 ? 1 : 0 // gtir 256 3 5
+r1 = r1 + r5 // addr 5 1 1
+r1 = r1 + 1 // addi 1 1 1
+r1 = 27 // seti 27 1 1
+r5 = 0 // seti 0 0 5
+r2 = r5 + 1 // addi 5 1 2
+r2 = r2 * 256 // muli 2 256 2
+r2 = r2 > r3 ? 1 : 0 // gtrr 2 3 2
+r1 = r2 + r1 // addr 2 1 1
+r1 = r1 + 1 // addi 1 1 1
+r1 = 25 // seti 25 1 1
+r5 = r5 + 1 // addi 5 1 5
+r1 = 17 // seti 17 1 1
+r3 = r5 // setr 5 2 3
+r1 = 7 // seti 7 6 1
+r5 = r4 == r0 ? 1 : 0 // eqrr 4 0 5
+r1 = r5 + r1 // addr 5 1 1
+r1 = 5 // seti 5 1 1
+
+//
+//
+//
+
+var r0 = X;
+var r1 = 0; // instruction counter
+var r2 = 0;
+var r3 = 0;
+var r4 = 0;
+var r5 = 0;
+
+r4 = 123
+LINE1:
+r4 = r4 & 456
+r4 = r4 == 72 ? 1 : 0
+GOTO r4 ? LINE5 : LINE1
+LINE5:
+r4 = 0
+LINE6:
+r3 = r4 | 65536
+r4 = 3730679
+LINE8:
+r5 = r3 & 255
+r4 = r4 + r5
+r4 = r4 & 16777215
+r4 = r4 * 65899
+r4 = r4 & 16777215
+r5 = 256 > r3 ? 1 : 0
+GOTO r5 ? LINE28 : LINE17
+LINE17:
+r5 = 0
+LINE18:
+r2 = r5 + 1
+r2 = r2 * 256
+r2 = r2 > r3 ? 1 : 0
+GOTO r2 ? LINE26 : LINE24
+LINE24:
+r5 = r5 + 1
+GOTO LINE18
+LINE26:
+r3 = r5
+GOTO LINE8
+LINE28:
+r5 = r4 == r0 ? 1 : 0
+GOTO r5 ? END : LINE6
+
+//
+//
+//
+
+var r0 = X;
+var r1 = 0; // instruction counter
+var r2 = 0;
+var r3 = 0;
+var r4 = 0;
+var r5 = 0;
+
+loop {
+    r3 = r4 | 65536
+    r4 = 3730679
+
+    loop {
+        r5 = r3 & 255
+        r4 = r4 + r5
+        r4 = r4 & 16777215
+        r4 = r4 * 65899
+        r4 = r4 & 16777215
+
+        if 256 > r3 {
+            break;
+        }
+
+        r5 = 0
+        loop {
+            r2 = r5 + 1
+            r2 = r2 * 256
+
+            if r2 > r3 {
+                break
+            }
+            r5 += 1
+        }
+        r3 = r5
+    }
+
+    if r4 == r0 { 
+        break 
+    }
+}
+
+//
+//
+//
+
+var r0 = X;
+var r3 = 0;
+var r4 = 0;
+
+loop {
+    r3 = r4 | 65536
+    r4 = 3730679
+
+    loop {
+        r4 = r4 + (r3 & 255)
+        r4 = r4 & 16777215
+        r4 = r4 * 65899
+        r4 = r4 & 16777215
+
+        if 256 > r3 {
+            break;
+        }
+        
+        r3 = r3 / 256 + 1 // integer division floors
+    }
+
+    if r4 == r0 { 
+        break 
+    }
+}
+
+//
+//
+//
+
+let mut r0 = X;
+let mut r3 = 0;
+let mut r4 = 0;
+
+loop {
+    r3 = r4 | 65536;
+    r4 = 3730679;
+
+    loop {
+        r4 = r4 + (r3 & 255);
+        r4 = r4 & 16777215;
+        r4 = r4 * 65899;
+        r4 = r4 & 16777215;
+
+        if 256 > r3 {
+            break;
+        }
+        
+        r3 = r3 / 256; // integer division floors
+    }
+
+    if r4 == r0 { 
+        break;
+    }
+}
+
+//
+// Next step: move into rust and run. See what r4 is
+// on each loop (an r0 equal will halt).
+//
