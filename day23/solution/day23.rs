@@ -57,16 +57,21 @@ fn number_overlapping(sphere: &Sphere, spheres: &[Sphere]) -> usize {
 
 fn largest_overlapping_set(spheres: &[Sphere]) -> Result<Vec<Sphere>> {
 
-    // Which spheres overlap with eachother?
+    // Which spheres overlap with eachother? As an optimisation, we
+    // only compare later spheres in the list for overlap; The earliest
+    // in a list of overlaps will always have all of the potential 
+    // overlaps in the group even if later ones do not.
     let mut overlaps = HashMap::new();
     for (idx1,s1) in spheres.iter().enumerate() {
         let mut os = HashSet::new();
-        for (idx2,s2) in spheres.iter().enumerate() {
-            if idx1 != idx2 && s1.overlaps_with(s2) {
+        for (idx2,s2) in spheres[idx1+1 .. ].iter().enumerate() {
+            if s1.overlaps_with(s2) {
                 os.insert(idx2);
             }
         }
-        overlaps.insert(idx1, os);
+        if os.len() > 0 {
+            overlaps.insert(idx1, os);
+        }
     }
 
     // For each sphere, find the set of total overlaps (ie
