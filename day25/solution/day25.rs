@@ -2,7 +2,6 @@ use std::result;
 use std::error::Error;
 use std::collections::{ HashMap, HashSet };
 
-macro_rules! err { ($($tt:tt)*) => { Box::<Error>::from(format!($($tt)*)) } }
 type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
 
 fn main() -> Result<()> {
@@ -44,7 +43,11 @@ fn main() -> Result<()> {
 
 }
 
-fn visit_neighbours(coords: &Coords, visited: &mut HashSet<Coords>, adjacent: &HashMap<Coords, Vec<Coords>>) {
+fn visit_neighbours(
+    coords: &Coords, 
+    visited: &mut HashSet<Coords>, 
+    adjacent: &HashMap<Coords, Vec<Coords>>
+) {
     for c in adjacent.get(coords).unwrap_or(&Vec::new()) {
         if !visited.contains(c) {
             visited.insert(*c);
