@@ -2,7 +2,6 @@ use regex::Regex;
 use lazy_static::lazy_static;
 use std::result;
 use std::error::Error;
-use std::collections::{ HashMap, HashSet };
 
 macro_rules! err { ($($tt:tt)*) => { Box::<Error>::from(format!($($tt)*)) } }
 type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
@@ -41,7 +40,7 @@ fn main() -> Result<()> {
         .map(|s| s.position.distance(&origin) - s.radius)
         .max().unwrap();
 
-    let mut overlapping_radii = (furthest..).filter(|&radius| {
+    let mut overlapping_radii = (furthest..).filter(|&radius| { 
         let s = Sphere { position: origin, radius };
         let num_overlapping = number_overlapping(&s, &spheres);
         num_overlapping == spheres.len()
@@ -61,43 +60,39 @@ fn largest_overlapping_set(spheres: &[Sphere]) -> Result<Vec<Sphere>> {
     // only compare later spheres in the list for overlap; The earliest
     // in a list of overlaps will always have all of the potential 
     // overlaps in the group even if later ones do not.
-    let mut overlaps = HashMap::new();
+    let mut overlaps = Vec::new();
     for (idx1,s1) in spheres.iter().enumerate() {
-        let mut os = HashSet::new();
-        for (idx2,s2) in spheres[idx1+1 .. ].iter().enumerate() {
+        let mut os: Vec<Sphere> = Vec::new();
+        for s2 in spheres[idx1+1 .. ].iter() {
             if s1.overlaps_with(s2) {
-                os.insert(idx2);
+                os.push(*s2);
             }
         }
-        if os.len() > 0 {
-            overlaps.insert(idx1, os);
-        }
+        os.push(*s1);
+        overlaps.push(os);
     }
 
     // For each sphere, find the set of total overlaps (ie
     // the fully connected sub-graph) from here.
-    let mut full_overlaps: Vec<Vec<usize>> = Vec::new();
-    for (&idx1, os) in &overlaps {
-        let mut full: HashSet<usize> = HashSet::new();
-        for &idx2 in os {
+    let mut full_overlaps: Vec<Vec<Sphere>> = Vec::new();
+    for os in overlaps {
+        let mut full: Vec<Sphere> = Vec::new();
+        for sphere in os {
             let overlaps_with_everything = full
                 .iter()
-                .all(|&idx| spheres[idx].overlaps_with(&spheres[idx2]));
+                .all(|s| s.overlaps_with(&sphere));
             if overlaps_with_everything {
-                full.insert(idx2);
+                full.push(sphere);
             }
         }
-        full.insert(idx1);
-        let v: Vec<_> = full.into_iter().collect();
-        full_overlaps.push(v);
+        full_overlaps.push(full);
     }
 
+    // Find the lagrest set of full overlaps and return it:
     full_overlaps
         .into_iter()
         .max_by_key(|v| v.len())
-        .map(|v| v.into_iter().map(|idx| spheres[idx]).collect())
         .ok_or(err!("no spheres"))
-
 }
 
 
