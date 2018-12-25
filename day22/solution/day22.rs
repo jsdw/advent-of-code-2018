@@ -64,10 +64,9 @@ mod solver {
                 None => { return false }
             };
 
-            // Get next potential states from first in list:
             let target = self.cave.target();
 
-            // Keep exploring these states if they havent finished and
+            // Keep exploring possible moves if they havent finished and
             // still have a chance to exceed the best time:
             for s in first.possible_moves(self.cave) {
 
@@ -105,7 +104,9 @@ mod solver {
             }
 
             // Sort by lowest distance+time-spent-so-far (reversed because
-            // we want to order best things to the back):
+            // we want to order best things to the back to pop them off). We want
+            // to get to the end ASAP to constrain which other moves are likely,
+            // so we sort in order to make this happen as quickly as possible.
             self.current.sort_unstable_by_key(|s| {
                 let distance = manhatten_distance(s.position, target);
                 Reverse(distance + s.time_spent)
