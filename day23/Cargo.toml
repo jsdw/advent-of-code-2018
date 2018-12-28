@@ -8,6 +8,11 @@ authors = ["James Wilson"]
 name = "day23"
 path = "solution/day23.rs"
 
+[[bin]]
+name = "day23alt"
+path = "solution/day23alt.rs"
+
 [dependencies]
 lazy_static = "1"
 regex = "1"
+rayon = "1"

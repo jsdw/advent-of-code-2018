@@ -1,5 +1,6 @@
 use regex::Regex;
 use lazy_static::lazy_static;
+use rayon::prelude::*;
 use std::result;
 use std::error::Error;
 
@@ -40,7 +41,7 @@ fn main() -> Result<()> {
         .map(|s| s.position.distance(&origin) - s.radius)
         .max().unwrap();
 
-    let mut overlapping_radii = (furthest..).filter(|&radius| { 
+    let mut overlapping_radii = (furthest..).filter(|&radius| {
         let s = Sphere { position: origin, radius };
         let num_overlapping = number_overlapping(&s, &spheres);
         num_overlapping == spheres.len()
@@ -55,42 +56,35 @@ fn number_overlapping(sphere: &Sphere, spheres: &[Sphere]) -> usize {
 }
 
 fn largest_overlapping_set(spheres: &[Sphere]) -> Result<Vec<Sphere>> {
-
     // Which spheres overlap with eachother? As an optimisation, we
     // only compare later spheres in the list for overlap; The earliest
-    // in a list of overlaps will always have all of the potential 
+    // in a list of overlaps will always have all of the potential
     // overlaps in the group even if later ones do not.
-    let mut overlaps = Vec::new();
-    for (idx1,s1) in spheres.iter().enumerate() {
-        let mut os: Vec<Sphere> = Vec::new();
-        for s2 in spheres[idx1+1 .. ].iter() {
-            if s1.overlaps_with(s2) {
-                os.push(*s2);
-            }
-        }
-        os.push(*s1);
-        overlaps.push(os);
-    }
+    let overlaps: Vec<Vec<Sphere>> = spheres.par_iter()
+        .enumerate()
+        .map(|(idx1,s1)| {
+            spheres[idx1+1 .. ].iter()
+                .filter(|s2| s1.overlaps_with(s2))
+                .cloned()
+                .collect()
+        })
+        .collect();
 
     // For each sphere, find the set of total overlaps (ie
-    // the fully connected sub-graph) from here.
-    let mut full_overlaps: Vec<Vec<Sphere>> = Vec::new();
-    for os in overlaps {
-        let mut full: Vec<Sphere> = Vec::new();
-        for sphere in os {
-            let overlaps_with_everything = full
-                .iter()
-                .all(|s| s.overlaps_with(&sphere));
-            if overlaps_with_everything {
-                full.push(sphere);
+    // the fully connected sub-graph) from here, and pick the largest
+    // of these to return.
+    overlaps.into_par_iter().map(|os| {
+            let mut full: Vec<Sphere> = Vec::new();
+            for sphere in os {
+                let overlaps_with_everything = full
+                    .iter()
+                    .all(|s| s.overlaps_with(&sphere));
+                if overlaps_with_everything {
+                    full.push(sphere);
+                }
             }
-        }
-        full_overlaps.push(full);
-    }
-
-    // Find the lagrest set of full overlaps and return it:
-    full_overlaps
-        .into_iter()
+            full
+        })
         .max_by_key(|v| v.len())
         .ok_or(err!("no spheres"))
 }
@@ -105,7 +99,7 @@ struct Sphere {
 impl Sphere {
     fn from_str(s: &str) -> Result<Sphere> {
         lazy_static!{
-            static ref re: Regex = 
+            static ref re: Regex =
                 Regex::new(r"pos=<(-?\d+),(-?\d+),(-?\d+)>, r=(\d+)").unwrap();
         }
         let caps = re.captures(s).ok_or(err!("'{}' not a sphere", s))?;
