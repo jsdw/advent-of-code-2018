@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-// Find all coordinates with the greatest number of overlaps:
+// Find the coordinates closest to origin with the greatest number of overlaps:
 fn find_best_overlapping_coords(bots: &[Bot]) -> Position {
 
     // Roughly work out how big to make our original bounding cube and begin with it:
