@@ -9,10 +9,10 @@ type Result<T> = result::Result<T, Box<dyn Error + 'static>>;
 fn main() -> Result<()> {
 
     let filename = std::env::args().nth(1).expect("need puzzle input");
-    let input: Result<Vec<Sphere>> = std::fs::read_to_string(filename)
+    let input: Result<Vec<Bot>> = std::fs::read_to_string(filename)
         .expect("can't open file")
         .lines()
-        .map(Sphere::from_str)
+        .map(Bot::from_str)
         .collect();
 
     let spheres = input?;
@@ -33,11 +33,11 @@ fn main() -> Result<()> {
 }
 
 // Find all coordinates with the greatest number of overlaps:
-fn find_best_overlapping_coords(spheres: &[Sphere]) -> Position {
+fn find_best_overlapping_coords(bots: &[Bot]) -> Position {
 
     // Roughly work out how big to make our original bounding cube and begin with it:
-    let max = spheres.iter().map(|s| s.position.from_origin() as usize).max().unwrap();
-    let mut searchers = vec![(spheres.len(), BoundingCube::new(Position{x:0,y:0,z:0}, max))];
+    let max = bots.iter().map(|s| s.position.from_origin() as usize).max().unwrap();
+    let mut searchers = vec![(bots.len(), BoundingCube::new(Position{x:0,y:0,z:0}, max))];
 
     let mut best_coords = Position {x:0,y:0,z:0};
     let mut best_overlap = 0;
@@ -74,11 +74,10 @@ fn find_best_overlapping_coords(spheres: &[Sphere]) -> Position {
             continue;
         }
 
-        // break the sphere down add it to our search list. Keep only
-        // those with the highest overlap count, so that our search
-        // only contains potentially valid things.
+        // break the bounding cube down into 8 smaller cubes and add those,
+        // caching how many bots they each overlap:
         bounds.split().into_iter()
-            .map(|&b| (number_overlapping(&b, &spheres),b))
+            .map(|&b| (number_overlapping(&b, &bots),b))
             .for_each(|o| searchers.push(o));
 
         // Put most desirable next search at the back for the next time:
@@ -89,11 +88,9 @@ fn find_best_overlapping_coords(spheres: &[Sphere]) -> Position {
     best_coords
 }
 
-// Count how many spheres are possibly overlapping. Gives an exact answer
-// for a bounding box of 1x1x1, otherwise the answer will be approximate
-// and will give an upper bound on the number of overlaps.
-fn number_overlapping(bounds: &BoundingCube, spheres: &[Sphere]) -> usize {
-    spheres.iter().filter(|&s| bounds.overlaps_sphere(s)).count()
+// Count how many bots are overlapping the bounding cube provided.
+fn number_overlapping(bounds: &BoundingCube, bots: &[Bot]) -> usize {
+    bots.iter().filter(|&bot| bounds.overlaps_bot(bot)).count()
 }
 
 // A Bounding cube has a power-of-two size so it can easily divide into
@@ -140,7 +137,7 @@ impl BoundingCube {
     fn distance_from_origin(&self) -> i64 {
         self.distance_from(&Position{x:0,y:0,z:0})
     }
-    fn overlaps_sphere(&self, s: &Sphere) -> bool {
+    fn overlaps_bot(&self, s: &Bot) -> bool {
         let pos = self.closest_to(&s.position);
         s.overlaps_position(&pos)
     }
@@ -169,27 +166,27 @@ impl BoundingCube {
     }
 }
 
-// Spheres (not realy spheres) are centered on some coordinate,
-// and their radius determines how far out from that center they
-// expand. A sphere with a radius 0 is 1 block at position.
+// Bots are centered on some coordinate, and their radius determines how
+// far out from that center they can reach in manhatten distance. A bot
+// with a radius 0 is 1 block at the position given
 #[derive(Debug,Clone,Copy,Eq,PartialEq)]
-struct Sphere {
+struct Bot {
     position: Position,
     radius: i64
 }
-impl Sphere {
+impl Bot {
     fn overlaps_position(&self, pos: &Position) -> bool {
         let dist = self.position.distance(pos);
         dist - self.radius <= 0
     }
-    fn from_str(s: &str) -> Result<Sphere> {
+    fn from_str(s: &str) -> Result<Bot> {
         lazy_static!{
             static ref re: Regex =
                 Regex::new(r"pos=<(-?\d+),(-?\d+),(-?\d+)>, r=(\d+)").unwrap();
         }
         let caps = re.captures(s).ok_or(err!("'{}' not a sphere", s))?;
         let get = |n| caps.get(n).unwrap().as_str().parse().unwrap();
-        Ok(Sphere {
+        Ok(Bot {
             position: Position { x: get(1), y: get(2), z: get(3) },
             radius: get(4)
         })
